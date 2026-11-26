@@ -62,5 +62,8 @@ The first upload to Aminet. Since 0.1.1 on GitHub: tabs; logging in
 with the keyboard (Tab goes on from a field clicked into, Return sends
 the form as its submit button would); links styled as buttons look
 like buttons (a background, padding and an outline behind inline
-elements); Velox.guide, this documentation as an AmigaGuide; icons in
+elements); text areas edited as in a notepad (the cursor anywhere,
+lines wrapped, Shift selects, undo and redo); address completion (the
+pages visited that match are listed under the address field as you
+type); Velox.guide, this documentation as an AmigaGuide; icons in
 MagicWB's colours.

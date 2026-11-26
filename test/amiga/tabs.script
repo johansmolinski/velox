@@ -1,19 +1,15 @@
 ; tabs: pages loading in several tabs at once (test/amiga/tabs.host;
 ; the mouse commands it writes, tabs.goN, run here); no memory may be
-; lost when tabs close
+; lost when tabs close (a first run, the address list opened in it too,
+; leaves what the OS keeps once out of the count)
 Echo >VELOX:r/tabs.txt "tabs"
 FailAt 21
-Delete >NIL: VELOX:r/tabs.go#? VELOX:r/tabs.end
-Run >NIL: VELOX:velox http://127.0.0.1:8080/tabs.html
-Wait 8
-Status >ENV:vpid COMMAND=VELOX:velox
-Break $vpid C
-Wait 2
-Delete >NIL: ENV:vpid
+Delete >NIL: VELOX:r/tabs.go#? VELOX:r/tabs.end VELOX:r/tabs0.log
+Echo >VELOX:r/tabs.start ""
+VELOX:velox http://127.0.0.1:8080/tabs.html LOG=VELOX:r/tabs0.log
 Avail >NIL: FLUSH
 Echo >>VELOX:r/tabs.txt "mem_before " NOLINE
 Avail >>VELOX:r/tabs.txt TOTAL
-Echo >VELOX:r/tabs.start ""
 Run >NIL: VELOX:velox http://127.0.0.1:8080/tabs.html LOG=VELOX:r/tabs.log
 Lab w1
 IF EXISTS VELOX:r/tabs.end

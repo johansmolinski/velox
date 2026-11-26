@@ -39,7 +39,7 @@ VELOX_I	SET	1
 
 ; the version (a release raises the last digit) and its date, for $VER
 VERSION_STR	MACRO
-	dc.b	"0.1.2"
+	dc.b	"0.1.3"
 	ENDM
 VERSION_DATE	MACRO
 	dc.b	"26.11.2026"

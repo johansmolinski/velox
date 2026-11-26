@@ -74,7 +74,17 @@ def keep():
 threading.Thread(target=keep, daemon=True).start()
 try:
     a = Amiga()
-    wait_log(log, "page " + U + "tabs.html", timeout=60)
+    # the first run (not counted): the address list opened, then quit
+    log0 = os.path.join(r, "tabs0.log")
+    wait_log(log0, "page " + U + "tabs.html", timeout=60)
+    time.sleep(1)
+    a.key("ctrl+l"); a.key("amiga+x")
+    a.type(U + "tabs.html")
+    wait_log(log0, "drop ", timeout=30)
+    a.key("Return")
+    time.sleep(3)
+    a.key("ctrl+q")
+    wait_log(log, "page " + U + "tabs.html", timeout=90)
     time.sleep(1)
     # a tab behind, and the shown tab loading too
     focus(a, "images.html")
@@ -214,8 +224,8 @@ try:
         m = after(n, "tabmem ")
         mem.append(int(lines()[m].split()[1]))
     step("free memory after each: %s" % mem)
-    if abs(mem[2] - mem[1]) > 4096:
-        raise AssertionError("a tab closed keeps memory")
+    if mem[1] - mem[2] > 4096:          # (less free: kept; more is the
+        raise AssertionError("a tab closed keeps memory")  # OS freeing)
     a.key("ctrl+q")
     step("ok")
     open(os.path.join(r, "tabs.end"), "w").close()

@@ -49,7 +49,7 @@
 	xref	ProfLog,ProfRead
 	ENDC
 
-PF_MAGIC	equ	'VXP2'
+PF_MAGIC	equ	'VXP3'		; (3: flex in the styles)
 PF_CHUNK	equ	16384		; bytes copied or written between yields
 PF_SECT		equ	28		; pointers: section << 28 | offset
 PF_OFF		equ	$0fffffff

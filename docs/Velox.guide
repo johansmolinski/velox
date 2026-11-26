@@ -262,7 +262,7 @@ Without AmiSSL, or to make https fast on a slow Amiga, run velox-proxy.py on a m
 @{b}What Velox shows@{ub}
 
   - HTML with a tolerant parser; UTF-8, Latin-1 and Windows-1252 pages
-  - CSS: selectors with specificity (also :not(), :is(), attributes, structural ones), colours (also rgb(), hsl() and calc() in them), custom properties with var(), fonts, margins, padding, widths, alignment, display, floats, media queries, backgrounds; links styled as buttons look like buttons
+  - CSS: selectors with specificity (also :not(), :is(), attributes, structural ones), colours (also rgb(), hsl() and calc() in them), custom properties with var(), flexbox (rows, columns, wrapping, grow, gaps, alignment), fonts, margins, padding, widths, alignment, display, floats, media queries, backgrounds; links styled as buttons look like buttons
   - Tables, lists, preformatted text, headings, rules
   - Images: JPEG (also progressive), PNG (also with transparency), GIF and WebP (lossy and lossless) decoded by Velox, dithered to the screen's colours; other formats through datatypes; background images
   - Forms: text fields, passwords, check boxes, radio buttons, selects, text areas; GET and POST

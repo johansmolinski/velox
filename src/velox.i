@@ -255,6 +255,21 @@ SF_INLIST	equ	1		; st_Flags: inside a list (inherited)
 SF_MAUTO	equ	2		; st_Flags: margin-left/right auto
 SF_FLOATL	equ	4		; st_Flags: float: left (images)
 SF_FLOATR	equ	8		; st_Flags: float: right
+SF_MAUTOL	equ	$10		; st_Flags: margin-left: auto (flex items)
+SF_MAUTOR	equ	$20		; st_Flags: margin-right: auto
+FF_COLUMN	equ	1		; st_FlexF: flex-direction: column
+FF_WRAP		equ	2		; ... flex-wrap: wrap
+FF_NOSHRINK	equ	4		; ... (an item) flex-shrink: 0
+JC_START	equ	0		; st_Just: justify-content
+JC_END		equ	1
+JC_CENTER	equ	2
+JC_BETWEEN	equ	3
+JC_AROUND	equ	4
+JC_EVENLY	equ	5
+AI_STRETCH	equ	0		; st_AlignI: align-items (st_AlignS:
+AI_START	equ	1		;  align-self, AI_xxx + 1; 0 auto)
+AI_CENTER	equ	2
+AI_END		equ	3
 
 	RSRESET
 st_Display	rs.b	1		; DISP_xxx
@@ -282,6 +297,14 @@ st_Edge		rs.l	1		; border colour, or -1 (an inline box's
 					; outline; not inherited)
 st_Shadow	rs.l	1		; box-shadow colour, or -1 (the outline
 					; without a border; not inherited)
+st_FlexF	rs.b	1		; flex (none inherited): FF_xxx
+st_Just		rs.b	1		; JC_xxx
+st_AlignI	rs.b	1		; AI_xxx
+st_AlignS	rs.b	1		; an item's align-self: AI_xxx + 1, 0 auto
+st_Grow		rs.b	1		; an item's flex-grow (0 - 255)
+st_Gap		rs.b	1		; column-gap, px
+st_RGap		rs.b	1		; row-gap, px
+st_FlexPad	rs.b	1
 STYLE_SIZEOF	rs.b	0
 SK_GEN		equ	0		; n_Style (style.s): g_StyleGen,
 SK_PARENT	equ	4		; the parent's style,
@@ -638,6 +661,7 @@ g_Marker	rs.l	1		; list marker pending (LIST_xxx + 1)
 g_MarkerNum	rs.l	1
 g_ListNum	rs.l	1		; counter of the innermost list
 g_LayDepth	rs.l	1
+g_FlexDepth	rs.l	1		; flex.s: flex containers we are in
 g_MeasMin	rs.l	1		; table measuring
 g_MeasPref	rs.l	1
 g_MeasLine	rs.l	1

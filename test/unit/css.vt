@@ -14,3 +14,9 @@ cssfilter test/www/big.html test/www/css/big.css 400
 # later; not another variation's or a dark scheme's); rgb(), rgba(),
 # hsl(), hsla() with calc(); alpha mixed with white
 layout test/unit/layout/vars.html 400
+# flexbox (flex.s): rows, grow, gap, justify-content, auto margins,
+# align-items, wrap, columns, basis, shrinking, nested, in a table cell
+layout test/unit/layout/flex.html 400
+layout test/unit/layout/flex.html 200
+# a class found after another class it begins with ("pairs pairs--inline")
+layout test/unit/layout/classes.html 400

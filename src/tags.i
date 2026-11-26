@@ -21,6 +21,7 @@ DISP_CELL	equ	6
 DISP_IBLOCK	equ	7
 DISP_ROWGROUP	equ	8
 DISP_CAPTION	equ	9
+DISP_FLEX	equ	10		; display: flex (flex.s)
 FOP_MONO	equ	1
 FOP_SMALLER	equ	2
 FOP_LARGER	equ	3

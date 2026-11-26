@@ -11,7 +11,7 @@
 
 	include	"velox.i"
 
-	xdef	LayoutTable
+	xdef	LayoutTable,MeasureCell,MeasureItem
 	xref	StyleCompute,CssApply,LayoutBlockContent,LayoutNode,StyleOf
 	xref	LayPoll
 	xref	LineReset,AddRun,LayRunPtr,LayRunCount,ApplyPendingMargin
@@ -1043,6 +1043,19 @@ AnAlt:		dc.b	"alt",0
 ; Measuring: minimum and preferred content widths
 ;--------------------------------------------------------------------
 
+; MeasureItem - a node as its parent lays it out (flex.s)
+; In: a0 = node, a1 = the parent's style
+; Out: d0 = minimum width, d1 = preferred width
+MeasureItem:
+	clr.l	g_MeasMin(a4)
+	clr.l	g_MeasPref(a4)
+	clr.l	g_MeasLine(a4)
+	bsr	MeasureNode
+	bsr	MeasBreak
+	move.l	g_MeasMin(a4),d0
+	move.l	g_MeasPref(a4),d1
+	rts
+
 ; MeasureCell - In: a0 = cell, a1 = its style
 ; Out: d0 = minimum width, d1 = preferred width
 MeasureCell:
@@ -1167,8 +1180,12 @@ MeasureNode:
 	cmp.b	#DISP_IBLOCK,d0
 	beq.s	.inl
 	cmp.b	#DISP_ROW,d0
-	beq.s	.row
-	; block: measure apart, add its margins
+	beq	.row
+	cmp.b	#DISP_FLEX,d0		; a flex row: its items side by side
+	bne.s	.blk
+	btst	#0,st_FlexF(a3)		; (FF_COLUMN: as a block)
+	beq	.frow
+.blk:	; block: measure apart, add its margins
 	bsr	MeasBreak
 	move.l	g_MeasMin(a4),d2
 	move.l	g_MeasPref(a4),d3
@@ -1232,6 +1249,64 @@ MeasureNode:
 .pop:	lea	STYLE_SIZEOF(sp),sp
 	subq.l	#1,g_LayDepth(a4)
 	bra	.x
+.frow:	; a flex row (flex.s): the items' widths and gaps added up (with
+	; wrap: the widest item's minimum), and its margins
+	bsr	MeasBreak
+	move.l	g_MeasMin(a4),d2
+	move.l	g_MeasPref(a4),d3
+	moveq	#0,d4			; d4 = minimum, d5 = preferred
+	moveq	#0,d5
+	moveq	#-1,d7			; d7 = items - 1
+	move.l	n_First(a5),d6
+.fc:	tst.l	d6
+	beq.s	.fcd
+	move.l	d6,a0
+	clr.l	g_MeasMin(a4)
+	clr.l	g_MeasPref(a4)
+	clr.l	g_MeasLine(a4)
+	move.l	a3,a1
+	bsr	MeasureNode
+	bsr	MeasBreak
+	move.l	g_MeasPref(a4),d0
+	beq.s	.fn			; (blanks, hidden: no item)
+	addq.l	#1,d7
+	add.l	d0,d5
+	move.l	g_MeasMin(a4),d0
+	btst	#1,st_FlexF(a3)		; FF_WRAP
+	beq.s	.fs
+	cmp.l	d0,d4
+	bge.s	.fn
+	move.l	d0,d4
+	bra.s	.fn
+.fs:	add.l	d0,d4
+.fn:	move.l	d6,a0
+	move.l	n_Next(a0),d6
+	bra.s	.fc
+.fcd:	tst.l	d7			; the gaps
+	ble.s	.fg
+	moveq	#0,d0
+	move.b	st_Gap(a3),d0
+	mulu.l	d7,d0
+	add.l	d0,d5
+	btst	#1,st_FlexF(a3)
+	bne.s	.fg
+	add.l	d0,d4
+.fg:	moveq	#0,d0
+	move.w	st_MLeft(a3),d0
+	add.w	st_MRight(a3),d0
+	ext.l	d0
+	add.l	d0,d4
+	add.l	d0,d5
+	cmp.l	d2,d4
+	bge.s	.f1
+	move.l	d2,d4
+.f1:	cmp.l	d3,d5
+	bge.s	.f2
+	move.l	d3,d5
+.f2:	move.l	d4,g_MeasMin(a4)
+	move.l	d5,g_MeasPref(a4)
+	clr.l	g_MeasLine(a4)
+	bra	.pop
 
 .text:	move.l	n_Data(a5),a0
 	move.l	n_Data2(a5),d0

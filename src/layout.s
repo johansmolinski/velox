@@ -23,7 +23,7 @@
 	xdef	LayoutDocument,LayoutChildren,LayoutNode,LayoutBlockContent
 	xdef	FlushLine,LineReset,AddMargin,AddRun,RunCount,RunPtr,Measure
 	xdef	ApplyPendingMargin,IntAttr,ClearFloats,FindAnchor
-	xdef	LayRunCount,LayRunPtr,LayPoll
+	xdef	LayRunCount,LayRunPtr,LayPoll,LayoutBlock
 	xref	BufAppend
 	IFD	PROFILE
 	xref	ProfRead
@@ -31,7 +31,7 @@
 	xref	StyleRoot,StyleCompute,BufClear,BufReserve,PageAlloc,FmtDec,StyleOf
 	xref	DomGetAttr,ParseDec,LayoutTable,CssApply
 	xref	FormIsControl,FormControlSize,CssInvalidate,TaskPoll,BufFree,LogEvent
-	xref	ViewSelect
+	xref	ViewSelect,LayoutFlex
 
 	IFNE	RUN_SIZEOF-32
 	FAIL	"RunCount/RunPtr assume RUN_SIZEOF = 32"
@@ -84,6 +84,7 @@ LayoutDocument:
 	clr.l	g_LayWhite(a4)
 	clr.l	g_Marker(a4)
 	clr.l	g_LayDepth(a4)
+	clr.l	g_FlexDepth(a4)
 	clr.l	g_FlLBot(a4)
 	clr.l	g_FlRBot(a4)
 	moveq	#1,d0
@@ -502,7 +503,8 @@ AnName:	dc.b	"name",0
 	even
 
 ;--------------------------------------------------------------------
-; LayoutBlock - a block-level element (incl. list items and tables)
+; LayoutBlock - a block-level element (incl. list items, tables and
+; flex containers)
 ; In: a0 = element, a1 = its style
 ;--------------------------------------------------------------------
 LayoutBlock:
@@ -607,7 +609,11 @@ LayoutBlock:
 	jsr	LayoutTable
 	bra.s	.after
 .content:
-	bsr	LayoutChildren
+	cmp.b	#DISP_FLEX,st_Display(a3)
+	bne.s	.kids
+	jsr	LayoutFlex
+	bra.s	.after
+.kids:	bsr	LayoutChildren
 .after:	bsr	FlushLine
 	tst.l	d7
 	bmi.s	.norect

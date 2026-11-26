@@ -110,3 +110,166 @@ text 250 8 64 10 8 f1 s0 c4f4f4f "calc mix"
 text 270 8 24 10 8 f1 s0 c0000ff "deg"
 text 290 8 48 10 8 f1 s0 c000000 "inline"
 
+# flexbox (flex.s): rows, grow, gap, justify-content, auto margins,
+# align-items, wrap, columns, basis, shrinking, nested, in a table cell
+layout test/unit/layout/flex.html 400 => 
+height 231
+rect 0 8 24 10 0 f0 s0 ccccccc
+text 0 8 24 10 8 f1 s0 c000000 "one"
+rect 0 32 24 10 0 f0 s0 ccccccc
+text 0 32 24 10 8 f1 s0 c000000 "two"
+rect 0 56 40 10 0 f0 s0 ccccccc
+text 0 56 40 10 8 f1 s0 c000000 "three"
+rect 10 8 40 10 0 f0 s0 ccccccc
+text 10 8 40 10 8 f1 s0 c000000 "fixed"
+rect 10 48 344 10 0 f0 s0 ccccccc
+text 10 48 40 10 8 f1 s0 c000000 "grows"
+rect 20 8 16 10 0 f0 s0 ccccccc
+text 20 8 8 10 8 f1 s0 c000000 "a"
+rect 20 26 16 10 0 f0 s0 ccccccc
+text 20 26 8 10 8 f1 s0 c000000 "b"
+rect 30 8 32 10 0 f0 s0 ccccccc
+text 30 8 32 10 8 f1 s0 c000000 "left"
+rect 30 352 40 10 0 f0 s0 ccccccc
+text 30 352 40 10 8 f1 s0 c000000 "right"
+rect 40 188 24 10 0 f0 s0 ccccccc
+text 40 188 24 10 8 f1 s0 c000000 "mid"
+rect 50 8 32 10 0 f0 s0 ccccccc
+text 50 8 32 10 8 f1 s0 c000000 "logo"
+rect 50 368 24 10 0 f0 s0 ccccccc
+text 50 368 24 10 8 f1 s0 c000000 "nav"
+rect 60 8 40 30 0 f0 s0 ccccccc
+text 60 8 24 10 8 f1 s0 c000000 "one"
+text 70 8 24 10 8 f1 s0 c000000 "two"
+text 80 8 40 10 8 f1 s0 c000000 "three"
+rect 70 48 16 10 0 f0 s0 ccccccc
+text 70 48 8 10 8 f1 s0 c000000 "c"
+rect 90 8 75 10 0 f0 s0 ccccccc
+text 90 8 16 10 8 f1 s0 c000000 "w1"
+rect 90 83 75 10 0 f0 s0 ccccccc
+text 90 83 16 10 8 f1 s0 c000000 "w2"
+rect 90 158 75 10 0 f0 s0 ccccccc
+text 90 158 16 10 8 f1 s0 c000000 "w3"
+rect 90 233 75 10 0 f0 s0 ccccccc
+text 90 233 16 10 8 f1 s0 c000000 "w4"
+text 100 172 56 10 8 f1 s0 c000000 "centred"
+text 110 176 48 10 8 f1 s0 c000000 "column"
+rect 120 8 62 10 0 f0 s0 ccccccc
+text 120 8 24 10 8 f1 s0 c000000 "100"
+rect 120 70 32 10 0 f0 s0 ccccccc
+text 120 70 32 10 8 f1 s0 c000000 "rest"
+text 130 8 32 10 8 f1 s0 c000000 "text"
+text 130 40 32 10 8 f1 s0 c000000 "span"
+text 130 72 32 10 8 f1 s1 c0000ee L "link"
+rect 140 8 156 10 0 f0 s0 ceeeeee
+text 140 8 64 10 8 f1 s0 c000000 "wrap one"
+rect 140 164 156 10 0 f0 s0 ceeeeee
+text 140 164 64 10 8 f1 s0 c000000 "wrap two"
+rect 155 8 156 10 0 f0 s0 ceeeeee
+text 155 8 80 10 8 f1 s0 c000000 "wrap three"
+text 165 8 184 10 8 f1 s0 c000000 "a long text that has to"
+text 175 8 72 10 8 f1 s0 c000000 "wrap here"
+text 165 201 168 10 8 f1 s0 c000000 "and another long text"
+text 175 201 72 10 8 f1 s0 c000000 "beside it"
+text 185 8 16 10 8 f1 s0 c000000 "n1"
+text 185 29 16 10 8 f1 s0 c000000 "n2"
+text 185 355 16 10 8 f1 s0 c000000 "n3"
+text 185 376 16 10 8 f1 s0 c000000 "n4"
+text 195 8 168 10 8 f1 s0 c000000 "keeps its whole width"
+text 195 176 176 10 8 f1 s0 c000000 "this one gives way and"
+text 205 176 104 10 8 f1 s0 c000000 "wraps instead"
+rect 218 11 16 10 0 f0 s0 ccccccc
+text 218 11 16 10 8 f1 s0 c000000 "in"
+rect 218 27 32 10 0 f0 s0 ccccccc
+text 218 27 32 10 8 f1 s0 c000000 "cell"
+text 218 63 32 10 8 f1 s0 c000000 "next"
+
+layout test/unit/layout/flex.html 200 => 
+height 336
+rect 0 8 24 10 0 f0 s0 ccccccc
+text 0 8 24 10 8 f1 s0 c000000 "one"
+rect 0 32 24 10 0 f0 s0 ccccccc
+text 0 32 24 10 8 f1 s0 c000000 "two"
+rect 0 56 40 10 0 f0 s0 ccccccc
+text 0 56 40 10 8 f1 s0 c000000 "three"
+rect 10 8 40 10 0 f0 s0 ccccccc
+text 10 8 40 10 8 f1 s0 c000000 "fixed"
+rect 10 48 144 10 0 f0 s0 ccccccc
+text 10 48 40 10 8 f1 s0 c000000 "grows"
+rect 20 8 16 10 0 f0 s0 ccccccc
+text 20 8 8 10 8 f1 s0 c000000 "a"
+rect 20 26 16 10 0 f0 s0 ccccccc
+text 20 26 8 10 8 f1 s0 c000000 "b"
+rect 30 8 32 10 0 f0 s0 ccccccc
+text 30 8 32 10 8 f1 s0 c000000 "left"
+rect 30 152 40 10 0 f0 s0 ccccccc
+text 30 152 40 10 8 f1 s0 c000000 "right"
+rect 40 88 24 10 0 f0 s0 ccccccc
+text 40 88 24 10 8 f1 s0 c000000 "mid"
+rect 50 8 32 10 0 f0 s0 ccccccc
+text 50 8 32 10 8 f1 s0 c000000 "logo"
+rect 50 168 24 10 0 f0 s0 ccccccc
+text 50 168 24 10 8 f1 s0 c000000 "nav"
+rect 60 8 40 30 0 f0 s0 ccccccc
+text 60 8 24 10 8 f1 s0 c000000 "one"
+text 70 8 24 10 8 f1 s0 c000000 "two"
+text 80 8 40 10 8 f1 s0 c000000 "three"
+rect 70 48 16 10 0 f0 s0 ccccccc
+text 70 48 8 10 8 f1 s0 c000000 "c"
+rect 90 8 75 10 0 f0 s0 ccccccc
+text 90 8 16 10 8 f1 s0 c000000 "w1"
+rect 90 83 75 10 0 f0 s0 ccccccc
+text 90 83 16 10 8 f1 s0 c000000 "w2"
+rect 100 8 75 10 0 f0 s0 ccccccc
+text 100 8 16 10 8 f1 s0 c000000 "w3"
+rect 100 83 75 10 0 f0 s0 ccccccc
+text 100 83 16 10 8 f1 s0 c000000 "w4"
+text 110 72 56 10 8 f1 s0 c000000 "centred"
+text 120 76 48 10 8 f1 s0 c000000 "column"
+rect 130 8 62 10 0 f0 s0 ccccccc
+text 130 8 24 10 8 f1 s0 c000000 "100"
+rect 130 70 32 10 0 f0 s0 ccccccc
+text 130 70 32 10 8 f1 s0 c000000 "rest"
+text 140 8 32 10 8 f1 s0 c000000 "text"
+text 140 40 32 10 8 f1 s0 c000000 "span"
+text 140 72 32 10 8 f1 s1 c0000ee L "link"
+rect 150 8 156 10 0 f0 s0 ceeeeee
+text 150 8 64 10 8 f1 s0 c000000 "wrap one"
+rect 165 8 156 10 0 f0 s0 ceeeeee
+text 165 8 64 10 8 f1 s0 c000000 "wrap two"
+rect 180 8 156 10 0 f0 s0 ceeeeee
+text 180 8 80 10 8 f1 s0 c000000 "wrap three"
+text 190 8 48 10 8 f1 s0 c000000 "a long"
+text 200 8 72 10 8 f1 s0 c000000 "text that"
+text 210 8 48 10 8 f1 s0 c000000 "has to"
+text 220 8 72 10 8 f1 s0 c000000 "wrap here"
+text 190 92 88 10 8 f1 s0 c000000 "and another"
+text 200 92 72 10 8 f1 s0 c000000 "long text"
+text 210 92 72 10 8 f1 s0 c000000 "beside it"
+text 230 8 16 10 8 f1 s0 c000000 "n1"
+text 230 29 16 10 8 f1 s0 c000000 "n2"
+text 230 155 16 10 8 f1 s0 c000000 "n3"
+text 230 176 16 10 8 f1 s0 c000000 "n4"
+text 240 8 120 10 8 f1 s0 c000000 "keeps its whole"
+text 250 8 40 10 8 f1 s0 c000000 "width"
+text 240 146 32 10 8 f1 s0 c000000 "this"
+text 250 146 24 10 8 f1 s0 c000000 "one"
+text 260 146 40 10 8 f1 s0 c000000 "gives"
+text 270 146 24 10 8 f1 s0 c000000 "way"
+text 280 146 24 10 8 f1 s0 c000000 "and"
+text 290 146 40 10 8 f1 s0 c000000 "wraps"
+text 300 146 40 10 8 f1 s0 c000000 "inste"
+text 310 146 16 10 8 f1 s0 c000000 "ad"
+rect 323 11 16 10 0 f0 s0 ccccccc
+text 323 11 16 10 8 f1 s0 c000000 "in"
+rect 323 27 32 10 0 f0 s0 ccccccc
+text 323 27 32 10 8 f1 s0 c000000 "cell"
+text 323 63 32 10 8 f1 s0 c000000 "next"
+
+# a class found after another class it begins with ("pairs pairs--inline")
+layout test/unit/layout/classes.html 400 => 
+height 70
+text 10 8 256 10 8 f1 s0 cff0000 "a class after one it begins with"
+text 30 8 32 10 8 f1 s0 c0000ff "blue"
+text 50 8 96 10 8 f1 s0 c000000 "not this one"
+

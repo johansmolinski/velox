@@ -96,6 +96,19 @@ CP_BGIMAGE	rs.b	1
 CP_BGREPEAT	rs.b	1
 CP_BORDER	rs.b	1		; border, box-shadow: a colour
 CP_SHADOW	rs.b	1
+CP_FLEXDIR	rs.b	1		; flexbox (flex.s)
+CP_FLEXWRAP	rs.b	1
+CP_FLEXFLOW	rs.b	1
+CP_JUSTIFY	rs.b	1
+CP_ALIGNITEMS	rs.b	1
+CP_ALIGNSELF	rs.b	1
+CP_FLEX		rs.b	1
+CP_GROW		rs.b	1
+CP_SHRINK	rs.b	1
+CP_BASIS	rs.b	1
+CP_GAP		rs.b	1
+CP_COLGAP	rs.b	1
+CP_ROWGAP	rs.b	1
 CP_COUNT	rs.b	0
 
 	section	code,code
@@ -1559,6 +1572,20 @@ PropNames:
 	PN	CP_FLOAT,"float"
 	PN	CP_BORDER,"border"
 	PN	CP_SHADOW,"box-shadow"
+	PN	CP_FLEXDIR,"flex-direction"
+	PN	CP_FLEXWRAP,"flex-wrap"
+	PN	CP_FLEXFLOW,"flex-flow"
+	PN	CP_JUSTIFY,"justify-content"
+	PN	CP_ALIGNITEMS,"align-items"
+	PN	CP_ALIGNSELF,"align-self"
+	PN	CP_FLEX,"flex"
+	PN	CP_GROW,"flex-grow"
+	PN	CP_SHRINK,"flex-shrink"
+	PN	CP_BASIS,"flex-basis"
+	PN	CP_GAP,"gap"
+	PN	CP_GAP,"grid-gap"
+	PN	CP_COLGAP,"column-gap"
+	PN	CP_ROWGAP,"row-gap"
 	dc.b	0
 	even
 
@@ -2904,7 +2931,8 @@ HasWord:
 	beq.s	.end
 	cmp.b	(a0)+,d1
 	beq.s	.c
-	move.l	(sp)+,a1		; mismatch: skip the rest of the word
+	subq.l	#1,a0			; mismatch (that char may be the blank
+	move.l	(sp)+,a1		;  after it): skip the rest of the word
 .sk:	move.b	(a0),d0
 	beq.s	.no
 	cmp.b	#' ',d0
@@ -3097,6 +3125,14 @@ PropJump:
 	dc.w	PPosition-PropJump,PLeftTop-PropJump,PLeftTop-PropJump
 	dc.w	POpacity-PropJump,PFloat-PropJump,PBgImage-PropJump
 	dc.w	PBgRepeat-PropJump,PEdge-PropJump,PEdge-PropJump
+	dc.w	PFlexDir-PropJump,PFlexWrap-PropJump,PFlexFlow-PropJump
+	dc.w	PJustify-PropJump,PAlignItems-PropJump,PAlignSelf-PropJump
+	dc.w	PFlex-PropJump,PGrow-PropJump,PShrink-PropJump
+	dc.w	PWidth-PropJump,PGap-PropJump,PColGap-PropJump
+	dc.w	PRowGap-PropJump
+	IFNE	(*-PropJump)-2*CP_COUNT
+	FAIL	"PropJump: one entry per CP_xxx"
+	ENDC
 
 ; Kw - is the value (a0) the keyword a1 (lower case), as a whole word?
 ; Out: Z clear if yes; a0 kept
@@ -3144,6 +3180,266 @@ KwFind:
 
 PNop:	rts
 
+;--------------------------------------------------------------------
+; Flexbox properties (none inherited; flex.s lays them out)
+;--------------------------------------------------------------------
+PFlexDir:				; column, column-reverse
+	bclr	#0,st_FlexF(a3)		; FF_COLUMN
+	move.l	a2,a0
+	lea	KwColumn(pc),a1
+	jsr	StrIPrefix
+	beq.s	.x
+	bset	#0,st_FlexF(a3)
+.x:	rts
+
+PFlexWrap:				; wrap, wrap-reverse (not nowrap)
+	bclr	#1,st_FlexF(a3)		; FF_WRAP
+	move.l	a2,a0
+	lea	KwWrap(pc),a1
+	jsr	StrIPrefix
+	beq.s	.x
+	bset	#1,st_FlexF(a3)
+.x:	rts
+
+PFlexFlow:				; direction and wrap, any order
+	and.b	#~(FF_COLUMN|FF_WRAP),st_FlexF(a3)
+	move.l	a2,a0
+	lea	KwColumn(pc),a1
+	jsr	StrIFind
+	beq.s	.w
+	bset	#0,st_FlexF(a3)
+.w:	lea	KwWrap(pc),a1
+	bsr	KwFind
+	bne.s	.wr
+	lea	KwWrapRev(pc),a1
+	bsr	KwFind
+	beq.s	.x
+.wr:	bset	#1,st_FlexF(a3)
+.x:	rts
+
+PJustify:
+	lea	JustKw(pc),a1
+	bsr	FlexKw
+	move.b	d0,st_Just(a3)
+	rts
+
+PAlignItems:
+	lea	AlignKw(pc),a1
+	bsr	FlexKw
+	move.b	d0,st_AlignI(a3)
+	rts
+
+PAlignSelf:
+	moveq	#0,d0			; auto
+	move.l	a2,a0
+	lea	KwAuto(pc),a1
+	bsr	Kw
+	bne.s	.s
+	lea	AlignKw(pc),a1
+	bsr	FlexKw
+	addq.b	#1,d0
+.s:	move.b	d0,st_AlignS(a3)
+	rts
+
+; FlexKw - the value a2 in table a1 (value, part of the word ...; $ff
+; ends): Out: d0 = the value of the first part found in it, else 0
+FlexKw:
+	move.l	a2,-(sp)
+.l:	moveq	#0,d0
+	move.b	(a1)+,d0
+	cmp.b	#$ff,d0
+	beq.s	.none
+	move.l	d0,-(sp)
+	move.l	a1,-(sp)
+	move.l	8(sp),a0
+	jsr	StrIFind
+	movem.l	(sp)+,a1
+	tst.l	d0
+	movem.l	(sp)+,d0
+	bne.s	.x
+.s:	tst.b	(a1)+
+	bne.s	.s
+	bra.s	.l
+.none:	moveq	#0,d0
+.x:	addq.l	#4,sp
+	rts
+
+JustKw:	dc.b	JC_BETWEEN,"between",0,JC_AROUND,"around",0
+	dc.b	JC_EVENLY,"evenly",0,JC_CENTER,"center",0,JC_END,"end",0
+	dc.b	JC_END,"right",0,$ff
+AlignKw:
+	dc.b	AI_CENTER,"center",0,AI_END,"end",0,AI_START,"start",0
+	dc.b	AI_START,"baseline",0,$ff
+KwColumn:	dc.b	"column",0
+KwWrap:		dc.b	"wrap",0
+KwWrapRev:	dc.b	"wrap-reverse",0
+KwContent:	dc.b	"content",0
+	even
+
+PShrink:				; flex-shrink: 0 keeps the width
+	move.l	a2,a0
+	bsr	FlexNum
+	bclr	#2,st_FlexF(a3)		; FF_NOSHRINK
+	tst.l	d0
+	bne.s	.x
+	tst.l	d1
+	beq.s	.x
+	bset	#2,st_FlexF(a3)
+.x:	rts
+
+PGrow:	move.l	a2,a0
+	bsr	FlexNum
+	move.b	d0,st_Grow(a3)
+	rts
+
+; FlexNum - a number at a0 (a fraction of 0, like 0.5, counts as 1),
+; 0 - 255  Out: d0, d1 = its digits (0: none), a0 after it
+FlexNum:
+	move.l	d2,-(sp)
+	jsr	ParseDec
+	move.l	d1,d2			; d2 = digits
+	cmp.b	#'.',(a0)
+	bne.s	.c
+	addq.l	#1,a0
+.f:	move.b	(a0),d1
+	sub.b	#'0',d1
+	cmp.b	#9,d1
+	bhi.s	.c
+	addq.l	#1,a0
+	addq.l	#1,d2
+	tst.b	d1
+	beq.s	.f
+	tst.l	d0
+	bne.s	.f
+	moveq	#1,d0
+	bra.s	.f
+.c:	cmp.l	#255,d0
+	bls.s	.x
+	move.l	#255,d0
+.x:	move.l	d2,d1
+	movem.l	(sp)+,d2
+	rts
+
+; PFlex - flex: none | auto | grow [shrink] [basis]
+PFlex:
+	move.l	a2,a0
+	lea	KwNone(pc),a1
+	bsr	Kw
+	beq.s	.na
+	clr.b	st_Grow(a3)
+	bset	#2,st_FlexF(a3)		; FF_NOSHRINK
+	rts
+.na:	lea	KwAuto(pc),a1
+	bsr	Kw
+	beq.s	.num
+	move.b	#1,st_Grow(a3)
+	rts
+.num:	bsr	SkipWs
+	bsr	IsNumStart
+	beq.s	.basis
+	bsr	FlexNum			; grow
+	move.b	d0,st_Grow(a3)
+	bsr	NumUnit			; (a basis: "flex: 200px")
+	bne.s	.b0
+	bsr	SkipWs
+	bsr	IsNumStart
+	beq.s	.basis
+	move.l	a0,-(sp)		; shrink, if it has no unit
+	bsr	FlexNum
+	bsr	NumUnit
+	movem.l	(sp)+,a1
+	beq.s	.sh
+	move.l	a1,a0
+	bra.s	.basis
+.sh:	bclr	#2,st_FlexF(a3)
+	tst.l	d0
+	bne.s	.s1
+	bset	#2,st_FlexF(a3)
+.s1:	bsr	SkipWs
+.basis:	tst.b	(a0)			; basis: a length (as a width)
+	beq.s	.x
+	move.l	a0,a2
+	bra	PWidth
+.b0:	move.l	a2,a0			; "flex: 200px": a basis alone
+	clr.b	st_Grow(a3)
+	bra	PWidth
+.x:	rts
+
+; IsNumStart - a digit or '.' at a0?  Out: Z clear if so (a0 kept)
+IsNumStart:
+	move.b	(a0),d0
+	cmp.b	#'.',d0
+	beq.s	.y
+	sub.b	#'0',d0
+	cmp.b	#9,d0
+	bhi.s	.n
+.y:	moveq	#1,d0
+	rts
+.n:	moveq	#0,d0
+	rts
+
+; NumUnit - a unit or % right after a number (a0)?  Out: Z clear if so
+NumUnit:
+	move.b	(a0),d0
+	cmp.b	#'%',d0
+	beq.s	.y
+	or.b	#$20,d0
+	cmp.b	#'a',d0
+	blo.s	.n
+	cmp.b	#'z',d0
+	bhi.s	.n
+.y:	moveq	#1,d0
+	rts
+.n:	moveq	#0,d0
+	rts
+
+; PGap - gap: row [column]; PColGap, PRowGap: one
+PGap:	move.l	a2,a0
+	bsr	GapLen
+	move.b	d0,st_RGap(a3)
+	move.b	d0,st_Gap(a3)
+	bsr	SkipWs
+	tst.b	(a0)
+	beq.s	.x
+	bsr	GapLen
+	move.b	d0,st_Gap(a3)
+.x:	rts
+PColGap:
+	move.l	a2,a0
+	bsr	GapLen
+	move.b	d0,st_Gap(a3)
+	rts
+PRowGap:
+	move.l	a2,a0
+	bsr	GapLen
+	move.b	d0,st_RGap(a3)
+	rts
+
+; GapLen - a length at a0 in our pixels, 0 - 255 (normal, %: 0)
+; Out: d0, a0 after it
+GapLen:
+	bsr	SkipWs
+	moveq	#CSS_EM,d0
+	jsr	ParseLength
+	movem.l	d0-d1,-(sp)
+.sk:	move.b	(a0),d0			; (its unit)
+	beq.s	.v
+	cmp.b	#' ',d0
+	bls.s	.v
+	addq.l	#1,a0
+	bra.s	.sk
+.v:	movem.l	(sp)+,d0-d1
+	tst.l	d1			; (percentages: of what we do not know)
+	bne.s	.z
+	bsr	WidthValue
+	bmi.s	.z
+	cmp.l	#255,d0
+	bls.s	.x
+	move.l	#255,d0
+.x:	rts
+.z:	moveq	#0,d0
+	rts
+
 PDisplay:
 	cmp.b	#DISP_IBLOCK,st_Display(a3)	; images, controls: only "none"
 	bne.s	.any
@@ -3188,7 +3484,7 @@ DisplayKw:
 	dc.b	DISP_NONE,"none",0,DISP_BLOCK,"block",0,DISP_INLINE,"inline",0
 	dc.b	DISP_IBLOCK,"inline-block",0,DISP_INLINE,"inline-flex",0
 	dc.b	DISP_INLINE,"inline-grid",0,DISP_INLINE,"contents",0
-	dc.b	DISP_BLOCK,"flex",0,DISP_BLOCK,"grid",0,DISP_BLOCK,"flow-root",0
+	dc.b	DISP_FLEX,"flex",0,DISP_BLOCK,"grid",0,DISP_BLOCK,"flow-root",0
 	dc.b	DISP_LISTITEM,"list-item",0,DISP_TABLE,"table",0
 	dc.b	DISP_ROW,"table-row",0,DISP_CELL,"table-cell",0
 	dc.b	DISP_ROWGROUP,"table-row-group",0,DISP_ROWGROUP,"table-header-group",0
@@ -3639,6 +3935,11 @@ BoxSide:
 	cmp.l	#3,d1
 	bne.s	.zero
 .auto:	bset	#1,st_Flags(a3)		; SF_MAUTO
+	moveq	#5,d0			; SF_MAUTOR, SF_MAUTOL: which side
+	cmp.l	#3,d1			; (flex items)
+	bne.s	.side
+	moveq	#4,d0
+.side:	bset	d0,st_Flags(a3)
 .zero:	moveq	#0,d0
 .v:	tst.l	d0
 	bpl.s	.s

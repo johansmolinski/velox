@@ -86,3 +86,27 @@ text 10 8 216 10 8 f1 s0 c000000 "visible-print-sheet-ignored"
 
 # the ancestor filter (css.s) changes nothing: big.html with its sheet
 cssfilter test/www/big.html test/www/css/big.css 400 => 80 rules, without the filter: same
+# custom properties of the root (var(), fallbacks, nested, defined
+# later; not another variation's or a dark scheme's); rgb(), rgba(),
+# hsl(), hsla() with calc(); alpha mixed with white
+layout test/unit/layout/vars.html 400 => 
+height 310
+text 10 8 64 10 8 f1 s0 c0000ff "root var"
+rect 30 8 384 10 0 f0 s0 ce8f4fd
+text 30 8 64 10 8 f1 s0 c000000 "hsla var"
+text 50 8 64 10 8 f1 s0 c808080 "fallback"
+text 70 8 56 10 8 f1 s0 c000000 "missing"
+text 90 8 24 10 8 f1 s0 c008000 "hsl"
+text 110 8 32 10 8 f1 s0 ce0e0e0 "calc"
+rect 130 8 384 10 0 f0 s0 cd6d6d6
+text 130 8 24 10 8 f1 s0 c000000 "dim"
+text 150 8 32 10 8 f1 s0 c00aa00 "late"
+rect 170 8 384 10 0 f0 s0 cdddddd
+text 170 8 64 10 8 f1 s0 c000000 "alpha bg"
+text 190 8 24 10 8 f1 s0 cff0000 "rgb"
+text 210 8 32 10 8 f1 s0 c7f7f7f "rgba"
+text 230 8 72 10 8 f1 s0 c008000 "rgb space"
+text 250 8 64 10 8 f1 s0 c4f4f4f "calc mix"
+text 270 8 24 10 8 f1 s0 c0000ff "deg"
+text 290 8 48 10 8 f1 s0 c000000 "inline"
+

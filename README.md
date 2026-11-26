@@ -21,8 +21,10 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
 - HTML with a tolerant HTML5-style parser; UTF-8, Latin-1 and
   Windows-1252 pages
 - CSS subset: selectors (including `:not()`, `:is()`, attribute and
-  structural ones) with specificity, colors, fonts, margins, padding,
-  borders, widths, alignment, display, media queries; inline elements
+  structural ones) with specificity, colors (also `rgb()`, `hsl()`
+  and `calc()` in them), custom properties of the root with `var()`,
+  fonts, margins, padding, borders, widths, alignment, display, media
+  queries; inline elements
   with a background (buttons made of links, highlighted words) get it
   behind them with their padding, and an outline for `border` or
   `box-shadow`

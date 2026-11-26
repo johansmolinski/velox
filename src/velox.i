@@ -684,6 +684,8 @@ g_LineR		rs.l	1		;  taken into account)
 g_RunImg	rs.l	1		; layout: image of the next RECT run
 g_RunRep	rs.l	1		; ... repeated
 g_CssBase	rs.l	1		; URL of the sheet being used, or 0
+g_CssVars	rs.l	1		; css.s: custom properties of the root
+					; (hash buckets) while sheets are parsed
 g_StyleGen	rs.l	1		; style.s: changes when kept styles are stale
 g_RespFrom	rs.l	1		; cache.s: g_Resp came from 0 the network,
 					; 1 memory, 2 the disk cache as it was
@@ -761,6 +763,9 @@ g_CssNMatch	rs.l	1
 g_CssAncP	rs.l	2		; n_Anc of the element's parent (CssMatch)
 g_CssNoAnc	rs.l	1		; (tests) match without the ancestor filter
 g_CssTmp	rs.b	4096		; declarations being parsed (DECL_TMP)
+g_CssVarBuf	rs.b	2048		; a value with var()s substituted (VAR_BUF)
+g_CssSelS	rs.l	1		; the selectors of the rule parsed (its
+g_CssSelE	rs.l	1		; custom properties: the root's?), or 0
 ; TLS (AmiSSL)
 g_AmiSSLMasterBase rs.l	1
 g_AmiSSLBase	rs.l	1

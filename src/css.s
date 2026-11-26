@@ -18,6 +18,12 @@
 ; Lengths: CSS pixels are scaled to the size of our fonts (16 CSS px =
 ; one em of the normal font).
 ;
+; Custom properties: those of rules for the root element (:root, html,
+; not in an @media that depends on the width) are kept while the page's
+; sheets are parsed, and var() is replaced with them (or its fallback)
+; when a declaration is read.  Their table goes at the end of CssLoad:
+; var() in style="" (read at layout) only has its fallback.
+;
 
 	include	"velox.i"
 	xref	TaskPoll
@@ -35,6 +41,17 @@
 MAX_SHEETS	equ	8		; linked style sheets fetched per page
 MAX_SHEET	equ	512*1024
 DECL_TMP	equ	4096
+VAR_BUF		equ	2048		; (g_CssVarBuf)
+VAR_BUCKETS	equ	256
+VAR_DEPTH	equ	16		; var()s in var()s (and loops)
+CP_CUSTOM	equ	$100		; a custom property ("--name: ...")
+	RSRESET
+ve_Next		rs.l	1		; a custom property: the next in its bucket
+ve_Name		rs.l	1		; its name (in the sheet)
+ve_NameLen	rs.l	1
+ve_Val		rs.l	1		; its value, as written: start
+ve_ValEnd	rs.l	1		; ... end
+VE_SIZEOF	rs.b	0
 CSS_EM		equ	16		; CSS px of the normal font size
 CSS_NAMEBUF	equ	256
 
@@ -88,6 +105,7 @@ CP_COUNT	rs.b	0
 ;--------------------------------------------------------------------
 CssReset:
 	jsr	StyleStale
+	clr.l	g_CssVars(a4)
 	clr.l	g_CssRules(a4)
 	clr.l	g_CssHasMq(a4)
 	moveq	#-1,d0
@@ -244,6 +262,7 @@ CssLoad:
 .go:	move.l	d0,a3
 	bra	.walk
 .x:	clr.l	g_CssBusy(a4)
+	clr.l	g_CssVars(a4)		; (only while sheets are parsed)
 	movem.l	(sp)+,d2-d3/a2-a3/a5
 	rts
 
@@ -399,6 +418,8 @@ ParseRules:
 	tst.b	(a0)
 	beq	.x
 	move.l	a0,d3			; end of the selectors
+	move.l	d2,g_CssSelS(a4)	; (for its custom properties)
+	move.l	d3,g_CssSelE(a4)
 	lea	1(a0),a0
 	bsr	ParseDecls		; d0 = declarations, a0 = after '}'
 	move.l	a0,a2
@@ -864,8 +885,9 @@ MqWidth:	dc.b	"width",0
 ; Out: d0 = declaration list (page pool) or 0, a0 = after the '}'
 ;--------------------------------------------------------------------
 ParseDecls:
-	movem.l	d2-d4/a2-a3,-(sp)
-	move.l	a0,a2
+	movem.l	d2-d6/a2-a3,-(sp)
+	moveq	#0,d6			; d6: the rule's for the root? 0 not
+	move.l	a0,a2			; known yet, 1 yes, -1 no
 	lea	g_CssTmp(a4),a3		; build here, then copy
 .loop:	move.l	a2,a0
 	bsr	SkipWs
@@ -884,10 +906,26 @@ ParseDecls:
 	bsr	SkipBlock
 	move.l	a0,a2
 	bra.s	.loop
-.pn:	move.l	a2,a0			; property name -> id
+.pn:	cmp.b	#'-',(a2)		; a custom property: "--name"
+	bne.s	.pid
+	cmp.b	#'-',1(a2)
+	bne.s	.pid
+	move.l	a2,d5			; d5 = its name
+	move.l	a2,a0
+.cn:	move.b	(a0),d0
+	beq.s	.cne
+	cmp.b	#':',d0
+	beq.s	.cne
+	cmp.b	#' ',d0
+	bls.s	.cne
+	addq.l	#1,a0
+	bra.s	.cn
+.cne:	move.l	#CP_CUSTOM,d2
+	bra.s	.pa
+.pid:	move.l	a2,a0			; property name -> id
 	bsr	PropId
 	move.l	d0,d2
-	move.l	a0,a2
+.pa:	move.l	a0,a2
 	bsr	SkipWs
 	cmp.b	#':',(a0)
 	beq.s	.colon
@@ -917,9 +955,18 @@ ParseDecls:
 	move.l	a0,a2
 	bra.s	.loop
 .v2:	tst.l	d2
-	beq.s	.skip
-	; trim and look for !important
+	beq	.skip
 	move.l	d3,a1
+	cmp.l	#CP_CUSTOM,d2
+	beq	.custom
+	bsr	HasVar			; var()s: replaced (in g_CssVarBuf)
+	beq.s	.tr
+	move.l	a2,a0
+	bsr	VarExpand
+	beq	.skip			; (one not defined, no fallback)
+	move.l	d0,a1
+	lea	g_CssVarBuf(a4),a2
+	; trim and look for !important
 .tr:	cmp.l	a2,a1
 	bls.s	.skip
 	cmp.b	#' ',-1(a1)
@@ -998,7 +1045,7 @@ ParseDecls:
 .cpe:	clr.b	(a3)+
 .skip:	move.l	d3,a2
 	tst.b	(a2)
-	beq.s	.end
+	beq	.end
 	cmp.b	#'}',(a2)
 	beq.s	.close
 	addq.l	#1,a2			; after ';'
@@ -1023,11 +1070,317 @@ ParseDecls:
 	bra.s	.x
 .none:	moveq	#0,d0
 .x:	move.l	a2,a0
-	movem.l	(sp)+,d2-d4/a2-a3
+	movem.l	(sp)+,d2-d6/a2-a3
 	rts
+.custom:				; "--name: value" (a2 .. a1)
+.ct:	cmp.l	a2,a1
+	bls	.skip
+	cmp.b	#' ',-1(a1)
+	bhi.s	.cte
+	subq.l	#1,a1
+	bra.s	.ct
+.cte:	tst.l	d6			; the root's? (once a rule)
+	bne.s	.cr
+	move.l	a1,-(sp)
+	bsr	RootRule
+	movem.l	(sp)+,a1
+	move.l	d0,d6
+.cr:	tst.l	d6
+	bmi	.skip
+	move.l	d5,a0
+	bsr	VarDefine
+	bra	.skip
 
 SImportant:	dc.b	"!important",0
 	even
+
+;--------------------------------------------------------------------
+; RootRule - are the custom properties of the rule parsed (g_CssSelS ..
+; g_CssSelE) the root element's: a selector matches it, not in an
+; @media that depends on the width?
+; Out: d0 = 1 if so, -1 if not (CCR set)
+;--------------------------------------------------------------------
+RootRule:
+	move.l	g_CssSelS(a4),d0
+	beq.s	.no
+	tst.w	g_CssMqMin(a4)
+	bne.s	.no
+	cmp.w	#$7fff,g_CssMqMax(a4)
+	bne.s	.no
+	move.l	d0,a0
+	move.l	g_CssSelE(a4),a1
+	moveq	#0,d0			; (matched against the root, not added)
+	bsr	ParseSelectorList
+	beq.s	.no
+	moveq	#1,d0
+	rts
+.no:	moveq	#-1,d0
+	rts
+
+; RootElem - Out: d0 = the document's root element (<html>) or 0 (CCR
+; set)
+RootElem:
+	move.l	g_Doc(a4),d0
+	beq.s	.x
+	move.l	d0,a0
+	move.l	n_First(a0),d0
+.l:	beq.s	.x
+	move.l	d0,a0
+	cmp.b	#DN_ELEMENT,n_Type(a0)
+	beq.s	.x
+	move.l	n_Next(a0),d0
+	bra.s	.l
+.x:	tst.l	d0
+	rts
+
+;--------------------------------------------------------------------
+; HasVar - is there a var() in a2 .. a1?
+; Out: d0 = 1 if so (CCR set; a1 kept)
+;--------------------------------------------------------------------
+HasVar:
+	lea	-3(a1),a0		; (where one can begin: before a0)
+	move.l	a2,d1
+.s:	cmp.l	a0,d1
+	bhs.s	.no
+	exg	d1,a0
+	bsr.s	IsVarFn
+	exg	d1,a0
+	bne.s	.yes
+	addq.l	#1,d1
+	bra.s	.s
+.yes:	moveq	#1,d0
+	rts
+.no:	moveq	#0,d0
+	rts
+
+; IsVarFn - is "var(" at a0 (at least 4 chars there)?  Out: d0 = 1 if
+; so (CCR set; a0, a1, d1 kept)
+IsVarFn:
+	moveq	#$20,d0
+	or.b	(a0),d0
+	cmp.b	#'v',d0
+	bne.s	.no
+	moveq	#$20,d0
+	or.b	1(a0),d0
+	cmp.b	#'a',d0
+	bne.s	.no
+	moveq	#$20,d0
+	or.b	2(a0),d0
+	cmp.b	#'r',d0
+	bne.s	.no
+	cmp.b	#'(',3(a0)
+	bne.s	.no
+	moveq	#1,d0
+	rts
+.no:	moveq	#0,d0
+	rts
+
+;--------------------------------------------------------------------
+; VarDefine - a custom property of the root: name a0 (up to a ':' or a
+; blank), value a2 .. a1 (kept as written; the latest wins)
+;--------------------------------------------------------------------
+VarDefine:
+	movem.l	d2/a2-a3,-(sp)
+	move.l	a0,a3
+	move.l	a1,d2
+	tst.l	g_CssVars(a4)		; the table, at the first one
+	bne.s	.t
+	move.l	#VAR_BUCKETS*4,d0
+	jsr	PageAlloc
+	move.l	d0,g_CssVars(a4)
+	beq.s	.x
+.t:	moveq	#VE_SIZEOF,d0
+	jsr	PageAlloc
+	beq.s	.x
+	move.l	d0,a1
+	move.l	a3,ve_Name(a1)
+	move.l	a2,ve_Val(a1)
+	move.l	d2,ve_ValEnd(a1)
+	move.l	a3,a0			; its name's length
+.n:	move.b	(a0),d0
+	cmp.b	#':',d0
+	beq.s	.ne
+	cmp.b	#' ',d0
+	bls.s	.ne
+	addq.l	#1,a0
+	bra.s	.n
+.ne:	sub.l	a3,a0
+	move.l	a0,ve_NameLen(a1)
+	move.l	a0,d0
+	move.l	a3,a0
+	bsr	VarHash			; first in its bucket
+	move.l	g_CssVars(a4),a0
+	lea	(a0,d0.l*4),a0
+	move.l	(a0),ve_Next(a1)
+	move.l	a1,(a0)
+.x:	movem.l	(sp)+,d2/a2-a3
+	rts
+
+; VarHash - the bucket of name a0, d0 long  Out: d0 (a1 kept)
+VarHash:
+	move.l	d2,-(sp)
+	move.l	d0,d1
+	moveq	#0,d0
+	bra.s	.e
+.l:	moveq	#0,d2
+	move.b	(a0)+,d2
+	mulu.l	#31,d0
+	add.l	d2,d0
+.e:	subq.l	#1,d1
+	bpl.s	.l
+	and.l	#VAR_BUCKETS-1,d0
+	movem.l	(sp)+,d2
+	rts
+
+;--------------------------------------------------------------------
+; VarFind - the custom property named a0, d0 long
+; Out: d0 = it (ve_xxx) or 0 (CCR set)
+;--------------------------------------------------------------------
+VarFind:
+	movem.l	d2/a2,-(sp)
+	move.l	a0,a2
+	move.l	d0,d2
+	move.l	g_CssVars(a4),d0
+	beq.s	.x
+	move.l	d0,a1
+	move.l	d2,d0
+	bsr	VarHash
+	move.l	(a1,d0.l*4),d0
+.l:	beq.s	.x
+	move.l	d0,a1
+	cmp.l	ve_NameLen(a1),d2
+	bne.s	.n
+	move.l	ve_Name(a1),a0		; compared from the end (they often
+	move.l	d2,d1			;  begin alike)
+.c:	subq.l	#1,d1
+	bmi.s	.same
+	move.b	(a0,d1.l),d0
+	cmp.b	(a2,d1.l),d0
+	beq.s	.c
+	bra.s	.n
+.same:	move.l	a1,d0
+	bra.s	.x
+.n:	move.l	ve_Next(a1),d0
+	bra.s	.l
+.x:	movem.l	(sp)+,d2/a2
+	tst.l	d0
+	rts
+
+;--------------------------------------------------------------------
+; VarExpand - value a0 .. a1 with its var()s replaced, in g_CssVarBuf
+; Out: d0 = its end there (a NUL), or 0 if a var() has nothing (CCR
+; set)
+;--------------------------------------------------------------------
+VarExpand:
+	move.l	a5,-(sp)
+	lea	g_CssVarBuf(a4),a5
+	moveq	#0,d0
+	bsr	VxRange
+	beq.s	.x
+	clr.b	(a5)
+	move.l	a5,d0
+.x:	movem.l	(sp)+,a5
+	tst.l	d0
+	rts
+
+; VxRange - (VarExpand) a0 .. a1 to a5 (advanced), var()s replaced;
+; d0 = how deep in var()s  Out: d0 = 1, or 0 if it failed (CCR set)
+VxRange:
+	movem.l	d2-d5/a2-a3,-(sp)
+	move.l	a0,a2			; a2 = cursor, a3 = end
+	move.l	a1,a3
+	move.l	d0,d4			; d4 = depth
+	cmp.l	#VAR_DEPTH,d4
+	bhi	.fail
+.l:	cmp.l	a3,a2
+	bhs	.ok
+	move.l	a3,d0
+	sub.l	a2,d0
+	cmp.l	#4,d0
+	blt.s	.ch
+	move.l	a2,a0
+	bsr	IsVarFn
+	bne.s	.var
+.ch:	lea	g_CssVarBuf+VAR_BUF-2(a4),a0
+	cmp.l	a0,a5
+	bhs	.fail
+	move.b	(a2)+,(a5)+
+	bra.s	.l
+.var:	lea	4(a2),a0		; the name
+.w:	cmp.b	#' ',(a0)
+	bne.s	.nm
+	addq.l	#1,a0
+	bra.s	.w
+.nm:	move.l	a0,d2			; d2 = it, d3 = its end
+.ne:	cmp.l	a3,a0
+	bhs.s	.ned
+	move.b	(a0),d0
+	cmp.b	#',',d0
+	beq.s	.ned
+	cmp.b	#')',d0
+	beq.s	.ned
+	cmp.b	#' ',d0
+	bls.s	.ned
+	addq.l	#1,a0
+	bra.s	.ne
+.ned:	move.l	a0,d3
+	moveq	#0,d5			; d5 = the fallback, a1 = the ')'
+	moveq	#1,d1
+.p:	cmp.l	a3,a0
+	bhs	.fail
+	move.b	(a0)+,d0
+	cmp.b	#'(',d0
+	bne.s	.p1
+	addq.l	#1,d1
+	bra.s	.p
+.p1:	cmp.b	#')',d0
+	bne.s	.p2
+	subq.l	#1,d1
+	bne.s	.p
+	lea	-1(a0),a1
+	bra.s	.pe
+.p2:	cmp.b	#',',d0
+	bne.s	.p
+	cmp.l	#1,d1
+	bne.s	.p
+	tst.l	d5
+	bne.s	.p
+	move.l	a0,d5
+	bra.s	.p
+.pe:	pea	1(a1)			; (after the ')': where to go on)
+	move.l	a1,-(sp)
+	move.l	d2,a0
+	move.l	d3,d0
+	sub.l	d2,d0
+	bsr	VarFind
+	beq.s	.fb
+	move.l	d0,a0
+	move.l	ve_ValEnd(a0),a1
+	move.l	ve_Val(a0),a0
+	addq.l	#4,sp
+	bra.s	.rec
+.fb:	move.l	(sp)+,a1		; none: its fallback
+	tst.l	d5
+	beq.s	.fail1
+	move.l	d5,a0
+.fw:	cmp.l	a1,a0
+	bhs.s	.rec
+	cmp.b	#' ',(a0)
+	bhi.s	.rec
+	addq.l	#1,a0
+	bra.s	.fw
+.rec:	move.l	d4,d0
+	addq.l	#1,d0
+	bsr	VxRange
+	movem.l	(sp)+,a2
+	beq.s	.fail
+	bra	.l
+.fail1:	addq.l	#4,sp
+.fail:	moveq	#0,d0
+	bra.s	.x
+.ok:	moveq	#1,d0
+.x:	movem.l	(sp)+,d2-d5/a2-a3
+	rts
 
 ;--------------------------------------------------------------------
 ; DeclValue - the value of a colour or a length, if it can be known
@@ -1211,7 +1564,8 @@ PropNames:
 
 ;--------------------------------------------------------------------
 ; ParseSelectorList - "a, b > c" for one declaration block
-; In: a0 = start, a1 = end (exclusive), d0 = declarations
+; In: a0 = start, a1 = end (exclusive), d0 = declarations; or d0 = 0:
+;     nothing added, Out: d0 = 1 if one matches the root (CCR set)
 ;--------------------------------------------------------------------
 ParseSelectorList:
 	movem.l	d2-d4/a2-a3,-(sp)
@@ -1220,6 +1574,7 @@ ParseSelectorList:
 	move.l	a0,a2
 	move.l	a1,a3
 	move.l	d0,d4
+	moveq	#0,d2			; (d0 = 0: does one match the root?)
 .sel:	cmp.l	a3,a2
 	bhs.s	.x
 	move.l	a2,a0			; end of this selector: ',' at depth 0
@@ -1251,12 +1606,23 @@ ParseSelectorList:
 	bsr	ParseSelector		; d0 = compound, d1 = specificity
 	tst.l	d0
 	beq.s	.next
+	tst.l	d4
+	beq.s	.root
 	move.l	d4,a0
 	bsr	AddRule
 .next:	move.l	d3,a2
 	addq.l	#1,a2			; after ','
 	bra.s	.sel
-.x:	movem.l	(sp)+,d2-d4/a2-a3
+.root:	move.l	d0,-(sp)
+	bsr	RootElem
+	movem.l	(sp)+,a1
+	beq.s	.next
+	move.l	d0,a0
+	bsr	MatchSelector
+	beq.s	.next
+	moveq	#1,d2
+.x:	move.l	d2,d0
+	movem.l	(sp)+,d2-d4/a2-a3
 	rts
 
 ;--------------------------------------------------------------------
@@ -2259,6 +2625,7 @@ CssMatch:
 	tst.l	d0
 	beq.s	.list
 	move.l	d0,a0
+	clr.l	g_CssSelS(a4)		; (no rule)
 	bsr	ParseDecls
 	move.l	d0,d4
 .list:	move.l	g_CssNMatch(a4),d2

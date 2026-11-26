@@ -1,0 +1,37 @@
+<html id=X class="c">
+<style>
+:root { --fg: #00f; --bg--h: 206; --bg--s: 80%; --bg--l: 95%; --bg--a: 1;
+  --bg: var(--bg--h),var(--bg--s),var(--bg--l),var(--bg--a);
+  --dim: 0,0%,calc(100% - (1 * 16%)),1; --late: var(--later); --later: #0a0 }
+:root[data-variation="alternate"] { --fg: #f00 }
+@media (prefers-color-scheme: dark) { :root { --fg: #ff0 } }
+.v1 { color: var(--fg) }
+.v2 { background: hsla(var(--bg)) }
+.v3 { color: var(--nope, #808080) }
+.v4 { color: var(--nope) }
+.v5 { color: hsl(120, 100%, 25%) }
+.v6 { color: hsla(0,0%,calc(calc(100% - (1 * 16%)) + (1 * 4%)),1) }
+.v7 { background: hsla(var(--dim)) }
+.v8 { color: var(--late) }
+.v9 { background-color: hsla(0,0%,8%,15%) }
+.va { color: rgb(255, 0, 0) }
+.vb { color: rgba(0,0,0,.5) }
+.vc { color: rgb(0 128 0 / 100%) }
+.vd { color: hsla(calc((0 * .5) + (0 * .5)),calc((0% * .5) + (0% * .5)),calc((8% * .5) + (54% * .5)),1) }
+.ve { background: rgba(0,0,0,0); color: hsl(240deg 100% 50%) }
+</style>
+<p class=v1>root var</p>
+<div class=v2>hsla var</div>
+<p class=v3>fallback</p>
+<p class=v4>missing</p>
+<p class=v5>hsl</p>
+<p class=v6>calc</p>
+<div class=v7>dim</div>
+<p class=v8>late</p>
+<div class=v9>alpha bg</div>
+<p class=va>rgb</p>
+<p class=vb>rgba</p>
+<p class=vc>rgb space</p>
+<p class=vd>calc mix</p>
+<p class=ve>deg</p>
+<p style="color: var(--fg)">inline</p>

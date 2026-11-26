@@ -477,8 +477,9 @@ ParseDecLocal:
 
 ;--------------------------------------------------------------------
 ; ParseColor - parse an HTML/CSS colour
-; In:  a0 = text ("#rgb", "#rrggbb", "rrggbb", "rgb(r,g,b)", name)
-; Out: d0 = $RRGGBB, or -1 if not understood
+; In:  a0 = text ("#rgb", "#rrggbb", "rrggbb", rgb(), rgba(), hsl(),
+;      hsla() (calc() in them too), a name)
+; Out: d0 = $RRGGBB, or -1 if not understood (or wholly transparent)
 ;--------------------------------------------------------------------
 ParseColor:
 	movem.l	d2-d4/a2,-(sp)
@@ -508,10 +509,10 @@ ParseColor:
 	dbf	d3,.ex
 	bra.s	.ok
 .nohash:
-	move.l	a2,a0
-	lea	SRgb(pc),a1
-	jsr	StrIPrefix
-	bne.s	.rgb
+	move.l	a2,a0			; rgb(), hsl() ...
+	bsr	ColorFn
+	cmp.l	#-2,d0
+	bne	.ok
 	; a bare 6 digit hex value (legacy bgcolor="ffffff")
 	bsr	HexRun
 	cmp.w	#6,d1
@@ -548,31 +549,6 @@ ParseColor:
 .nskip1:
 	subq.l	#1,a1			; back on the NUL
 	bra.s	.nskip
-.rgb:	; rgb(r, g, b) with 0-255 or percentages
-	moveq	#0,d2
-	moveq	#2,d3
-.rl:	jsr	SkipSpace
-	bsr	ParseDecLocal
-	tst.l	d1
-	beq.s	.bad
-	cmp.b	#'%',(a0)
-	bne.s	.rn
-	addq.l	#1,a0
-	mulu.w	#255,d0
-	divu.w	#100,d0
-	and.l	#$ffff,d0
-.rn:	cmp.l	#255,d0
-	bls.s	.rc
-	move.l	#255,d0
-.rc:	lsl.l	#8,d2
-	or.l	d0,d2
-	jsr	SkipSpace
-	cmp.b	#',',(a0)
-	bne.s	.rs
-	addq.l	#1,a0
-.rs:	dbf	d3,.rl
-	move.l	d2,d0
-	bra.s	.ok
 .bad:	moveq	#-1,d0
 .ok:	movem.l	(sp)+,d2-d4/a2
 	rts
@@ -601,7 +577,385 @@ HexRun:
 .x:	rts
 
 SRgb:	dc.b	"rgb",0
+SHsl:	dc.b	"hsl",0
+SCalc:	dc.b	"calc(",0
+SDeg:	dc.b	"deg",0
+STurn:	dc.b	"turn",0
+SRad:	dc.b	"rad",0
 	even
+
+;--------------------------------------------------------------------
+; ColorFn - rgb(), rgba(), hsl(), hsla() at a0: commas or blanks
+; between the parts, "/ alpha" or a fourth; calc() in any.  Not opaque:
+; mixed with white (we draw no alpha; pages are mostly light)
+; Out: d0 = $RRGGBB, -1 if not understood or transparent, -2 if no
+;      such function there
+;--------------------------------------------------------------------
+ColorFn:
+	movem.l	d2-d7/a2,-(sp)
+	lea	-16(sp),sp		; the parts (x 64), then r, g, b, alpha
+	moveq	#0,d7			; d7 = 0 rgb, 1 hsl
+	lea	SRgb(pc),a1
+	jsr	StrIPrefix
+	bne.s	.fn
+	moveq	#1,d7
+	lea	SHsl(pc),a1
+	jsr	StrIPrefix
+	beq	.none
+.fn:	moveq	#$20,d0			; rgba(, hsla(
+	or.b	(a0),d0
+	cmp.b	#'a',d0
+	bne.s	.pa
+	addq.l	#1,a0
+.pa:	jsr	SkipSpace
+	cmp.b	#'(',(a0)+
+	bne	.none
+	moveq	#0,d5			; d5 = parts, d6 = those in %
+	moveq	#0,d6
+.part:	jsr	SkipSpace
+	cmp.b	#')',(a0)
+	beq.s	.end
+	cmp.l	#4,d5
+	bhs	.bad
+	bsr	CalcFactor
+	btst	#1,d1
+	bne	.bad
+	move.l	d0,(sp,d5.l*4)
+	btst	#0,d1
+	beq.s	.np
+	bset	d5,d6
+.np:	addq.l	#1,d5
+	jsr	SkipSpace
+	move.b	(a0),d0
+	cmp.b	#',',d0
+	beq.s	.sep
+	cmp.b	#'/',d0
+	bne.s	.part
+.sep:	addq.l	#1,a0
+	bra.s	.part
+.end:	cmp.l	#3,d5
+	blo	.bad
+	moveq	#64,d0			; alpha, 0-64 (none: opaque)
+	cmp.l	#4,d5
+	bne.s	.a2
+	move.l	12(sp),d0		; (a number 0-1, x 64; or %)
+	btst	#3,d6
+	beq.s	.a1
+	divs.l	#100,d0
+.a1:	tst.l	d0
+	ble	.bad			; transparent: as if none
+	cmp.l	#64,d0
+	ble.s	.a2
+	moveq	#64,d0
+.a2:	move.l	d0,12(sp)
+	tst.l	d7
+	bne.s	.hsl
+	moveq	#0,d4			; rgb: 0-255 or %
+.rgb:	move.l	(sp,d4.l*4),d0
+	btst	d4,d6
+	beq.s	.r1
+	muls.l	#255,d0
+	divs.l	#100,d0
+.r1:	add.l	#32,d0
+	asr.l	#6,d0
+	bsr	Clamp255
+	move.l	d0,(sp,d4.l*4)
+	addq.l	#1,d4
+	cmp.l	#3,d4
+	blo.s	.rgb
+	bra	.alpha
+.hsl:	move.l	(sp),d0			; the hue, degrees x 64, to 0-359
+	move.l	#360*64,d1
+	divsl.l	d1,d2:d0		; (d2 = the remainder)
+	tst.l	d2
+	bpl.s	.h1
+	add.l	d1,d2
+.h1:	lsl.l	#4,d2			; d2 = H' = it / 60, x 1024
+	divu.l	#60,d2
+	move.l	4(sp),d0		; S, L: % x 64 -> 0-1024
+	bsr	Pct1024
+	move.l	d0,d3
+	move.l	8(sp),d0
+	bsr	Pct1024
+	move.l	d0,d4			; d4 = L
+	add.l	d0,d0			; C = (1 - |2L - 1|) x S
+	sub.l	#1024,d0
+	bpl.s	.c1
+	neg.l	d0
+.c1:	neg.l	d0
+	add.l	#1024,d0
+	mulu.l	d3,d0
+	moveq	#10,d1
+	lsr.l	d1,d0
+	move.l	d0,d3			; d3 = C
+	move.l	d2,d0			; X = C x (1 - |H' mod 2 - 1|)
+	and.l	#2047,d0
+	sub.l	#1024,d0
+	bpl.s	.x1
+	neg.l	d0
+.x1:	neg.l	d0
+	add.l	#1024,d0
+	mulu.l	d3,d0
+	moveq	#10,d1
+	lsr.l	d1,d0
+	move.l	d0,d5			; d5 = X
+	move.l	d3,d0			; d4 = m = L - C / 2
+	lsr.l	#1,d0
+	sub.l	d0,d4
+	moveq	#10,d1			; the sextant: r, g, b of C, X or 0
+	lsr.l	d1,d2
+	lea	HslOrder(pc),a2
+	lea	(a2,d2.l*4),a2
+	moveq	#0,d6			; d6 = r, g, b
+.ch:	moveq	#0,d0
+	move.b	(a2)+,d1
+	beq.s	.cs
+	move.l	d3,d0			; C
+	subq.b	#1,d1
+	beq.s	.cs
+	move.l	d5,d0			; X
+.cs:	add.l	d4,d0			; (it + m) x 255
+	mulu.l	#255,d0
+	add.l	#512,d0
+	moveq	#10,d1
+	lsr.l	d1,d0
+	bsr	Clamp255
+	move.l	d0,(sp,d6.l*4)
+	addq.l	#1,d6
+	cmp.l	#3,d6
+	blo.s	.ch
+.alpha:	movem.l	(sp),d2-d4		; d2-d4 = r, g, b
+	move.l	12(sp),d7		; not opaque: c x a + white x (1 - a)
+	cmp.l	#64,d7
+	bge.s	.pack
+	moveq	#64,d5
+	sub.l	d7,d5
+	mulu.l	#255,d5
+	mulu.l	d7,d2
+	add.l	d5,d2
+	lsr.l	#6,d2
+	mulu.l	d7,d3
+	add.l	d5,d3
+	lsr.l	#6,d3
+	mulu.l	d7,d4
+	add.l	d5,d4
+	lsr.l	#6,d4
+.pack:	move.l	d2,d0
+	lsl.l	#8,d0
+	or.l	d3,d0
+	lsl.l	#8,d0
+	or.l	d4,d0
+	bra.s	.x
+.none:	moveq	#-2,d0
+	bra.s	.x
+.bad:	moveq	#-1,d0
+.x:	lea	16(sp),sp
+	movem.l	(sp)+,d2-d7/a2
+	rts
+
+; (C = 1, X = 2, 0 = 0) for r, g, b in each sextant of the hue
+HslOrder:	dc.b	1,2,0,0, 2,1,0,0, 0,1,2,0, 0,2,1,0, 2,0,1,0, 1,0,2,0
+		dc.b	1,2,0,0
+
+; Clamp255 - d0 to 0 .. 255
+Clamp255:
+	tst.l	d0
+	bpl.s	.p
+	moveq	#0,d0
+.p:	cmp.l	#255,d0
+	bls.s	.x
+	move.l	#255,d0
+.x:	rts
+
+;--------------------------------------------------------------------
+; CalcFactor - a number (with its unit), (...) or calc(...) at a0;
+; CalcTerm - factors with * and /; CalcExpr - terms with + and -.
+; Units are left out (% noted; deg, turn, rad as degrees).
+; Out: d0 = the value x 64, d1 = flags: bit 0 a %, bit 1 not
+;      understood; a0 after it
+;--------------------------------------------------------------------
+CalcFactor:
+	jsr	SkipSpace
+	cmp.b	#'(',(a0)
+	beq.s	.par
+	lea	SCalc(pc),a1
+	jsr	StrIPrefix
+	beq	CalcNum
+	bra.s	.in
+.par:	addq.l	#1,a0
+.in:	bsr	CalcExpr
+.w:	cmp.b	#' ',(a0)
+	bne.s	.cl
+	addq.l	#1,a0
+	bra.s	.w
+.cl:	cmp.b	#')',(a0)
+	bne.s	.err
+	addq.l	#1,a0
+	rts
+.err:	bset	#1,d1
+	rts
+
+; CalcTerm - (CalcFactor)  Out: d0 = value x 64, d1 = flags
+CalcTerm:
+	movem.l	d2-d3,-(sp)
+	bsr	CalcFactor
+	move.l	d0,d2
+	move.l	d1,d3
+.l:	btst	#1,d3
+	bne.s	.x
+	jsr	SkipSpace
+	move.b	(a0),d0
+	cmp.b	#'*',d0
+	beq.s	.op
+	cmp.b	#'/',d0
+	bne.s	.x
+.op:	move.w	d0,-(sp)
+	addq.l	#1,a0
+	bsr	CalcFactor
+	or.l	d1,d3
+	move.w	(sp)+,d1
+	cmp.b	#'*',d1
+	bne.s	.div
+	muls.l	d0,d2
+	asr.l	#6,d2
+	bra.s	.l
+.div:	tst.l	d0
+	beq.s	.bad
+	asl.l	#6,d2
+	divs.l	d0,d2
+	bra.s	.l
+.bad:	bset	#1,d3
+.x:	move.l	d2,d0
+	move.l	d3,d1
+	movem.l	(sp)+,d2-d3
+	rts
+
+; CalcExpr - (CalcFactor)  Out: d0 = value x 64, d1 = flags
+CalcExpr:
+	movem.l	d2-d3,-(sp)
+	bsr	CalcTerm
+	move.l	d0,d2
+	move.l	d1,d3
+.l:	btst	#1,d3
+	bne.s	.x
+	jsr	SkipSpace
+	move.b	(a0),d0
+	cmp.b	#'+',d0
+	beq.s	.op
+	cmp.b	#'-',d0
+	bne.s	.x
+.op:	move.w	d0,-(sp)
+	addq.l	#1,a0
+	bsr	CalcTerm
+	or.l	d1,d3
+	move.w	(sp)+,d1
+	cmp.b	#'+',d1
+	bne.s	.sub
+	add.l	d0,d2
+	bra.s	.l
+.sub:	sub.l	d0,d2
+	bra.s	.l
+.x:	move.l	d2,d0
+	move.l	d3,d1
+	movem.l	(sp)+,d2-d3
+	rts
+
+; CalcNum - (CalcFactor) a number: [sign] digits [. digits] [unit]
+; Out: d0 = value x 64, d1 = flags
+CalcNum:
+	movem.l	d2-d6,-(sp)
+	moveq	#0,d6			; d6 = flags
+	moveq	#0,d4			; d4 = negative
+	cmp.b	#'-',(a0)
+	bne.s	.p
+	moveq	#1,d4
+	addq.l	#1,a0
+	bra.s	.i
+.p:	cmp.b	#'+',(a0)
+	bne.s	.i
+	addq.l	#1,a0
+.i:	moveq	#0,d2			; d2 = the value, d3 = digits
+	moveq	#0,d3
+.il:	moveq	#0,d0
+	move.b	(a0),d0
+	sub.b	#'0',d0
+	cmp.b	#9,d0
+	bhi.s	.ie
+	mulu.l	#10,d2
+	add.l	d0,d2
+	addq.l	#1,a0
+	addq.l	#1,d3
+	cmp.l	#100000,d2		; (no more than that)
+	blo.s	.il
+	bra.s	.bad
+.ie:	lsl.l	#6,d2
+	cmp.b	#'.',(a0)
+	bne.s	.u
+	addq.l	#1,a0
+	move.l	#6400,d5		; a fraction: x 64 x 1000 / 10 ...
+	moveq	#0,d1
+.fl:	moveq	#0,d0
+	move.b	(a0),d0
+	sub.b	#'0',d0
+	cmp.b	#9,d0
+	bhi.s	.fe
+	mulu.l	d5,d0
+	add.l	d0,d1
+	divu.l	#10,d5
+	addq.l	#1,a0
+	addq.l	#1,d3
+	bra.s	.fl
+.fe:	add.l	#500,d1
+	divu.l	#1000,d1
+	add.l	d1,d2
+.u:	tst.l	d3
+	beq.s	.bad
+	cmp.b	#'%',(a0)
+	bne.s	.u1
+	addq.l	#1,a0
+	bset	#0,d6
+	bra.s	.sg
+.u1:	lea	SDeg(pc),a1
+	jsr	StrIPrefix
+	bne.s	.sg
+	lea	STurn(pc),a1
+	jsr	StrIPrefix
+	beq.s	.u2
+	mulu.l	#360,d2
+	bra.s	.sg
+.u2:	lea	SRad(pc),a1
+	jsr	StrIPrefix
+	beq.s	.u3
+	mulu.l	#573,d2
+	divu.l	#10,d2
+	bra.s	.sg
+.u3:	moveq	#$20,d0			; other units: left out
+	or.b	(a0),d0
+	cmp.b	#'a',d0
+	blo.s	.sg
+	cmp.b	#'z',d0
+	bhi.s	.sg
+	addq.l	#1,a0
+	bra.s	.u3
+.bad:	bset	#1,d6
+.sg:	move.l	d2,d0
+	tst.l	d4
+	beq.s	.x
+	neg.l	d0
+.x:	move.l	d6,d1
+	movem.l	(sp)+,d2-d6
+	rts
+
+; Pct1024 - d0 = % x 64 -> 0 .. 1024
+Pct1024:
+	lsl.l	#4,d0
+	divs.l	#100,d0
+	bpl.s	.p
+	moveq	#0,d0
+.p:	cmp.l	#1024,d0
+	bls.s	.x
+	move.l	#1024,d0
+.x:	rts
 
 CN	MACRO
 	dc.l	\1

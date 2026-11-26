@@ -10,3 +10,7 @@ layout test/unit/layout/mq4.html 600
 layout test/unit/layout/mediaattr.html 400
 # the ancestor filter (css.s) changes nothing: big.html with its sheet
 cssfilter test/www/big.html test/www/css/big.css 400
+# custom properties of the root (var(), fallbacks, nested, defined
+# later; not another variation's or a dark scheme's); rgb(), rgba(),
+# hsl(), hsla() with calc(); alpha mixed with white
+layout test/unit/layout/vars.html 400

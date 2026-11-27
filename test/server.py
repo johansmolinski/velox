@@ -202,6 +202,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(n)
+        if self.path.startswith("/upload"):
+            # multipart/form-data: each part logged (a file: its name,
+            # type, size and MD5), not the bytes
+            import hashlib
+            ctype = self.headers.get("Content-Type", "")
+            sys.stderr.write("server: POST %s %s\n" % (self.path, ctype))
+            b = ctype.split("boundary=", 1)[-1].encode("latin-1")
+            for part in body.split(b"--" + b)[1:]:
+                if part.startswith(b"--"):
+                    break
+                head, _, data = part[2:].partition(b"\r\n\r\n")
+                data = data[:-2] if data.endswith(b"\r\n") else data
+                h = head.decode("latin-1")
+                name = h.split('name="', 1)[1].split('"', 1)[0]
+                if 'filename="' in h:
+                    fn = h.split('filename="', 1)[1].split('"', 1)[0]
+                    ct = h.split("Content-Type: ", 1)[1].split("\r", 1)[0] \
+                        if "Content-Type: " in h else "-"
+                    sys.stderr.write("server: UPLOAD %s file=%s type=%s size=%d md5=%s\n" % (
+                        name, fn, ct, len(data), hashlib.md5(data).hexdigest()))
+                else:
+                    sys.stderr.write("server: UPLOAD %s=%s\n" % (
+                        name, data.decode("utf-8", "replace")))
+            self.send(200, b"<title>Uploaded</title><p>Thank you.", "text/html")
+            return
         sys.stderr.write("server: POST %s body=%s\n" % (self.path, body.decode("latin-1")))
         if self.path.startswith("/echo"):
             text = "%s\n%s\n" % (self.requestline, body.decode("latin-1"))

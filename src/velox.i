@@ -702,6 +702,8 @@ g_FormBuf	rs.b	BUF_SIZEOF	; encoded form data
 g_PageCharset	rs.l	1		; CS_xxx the page was decoded from
 g_PostData	rs.l	1		; body for the next request (POST) or 0
 g_PostLen	rs.l	1
+g_PostMulti	rs.l	1		; the body is multipart/form-data (its
+					; boundary: its first line)
 g_CssIdTab	rs.l	1		; bucket heads (page pool)
 g_CssClassTab	rs.l	1
 g_CssTagTab	rs.l	1
@@ -847,6 +849,8 @@ g_Bsa		rs.b	48		; struct BitScaleArgs
 ; downloads
 g_DownloadDir	rs.b	256		; Velox/DownloadDir or "RAM:"
 g_AslBase	rs.l	1
+g_FormMulti	rs.l	1		; forms.s: the form sent as multipart
+g_FormBound	rs.b	32		; ... its boundary
 ; cookies
 g_Cookies	rs.l	1		; list, oldest first
 g_CookieCount	rs.l	1

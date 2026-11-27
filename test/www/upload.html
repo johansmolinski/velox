@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Upload</title></head><body>
+<h2>Send a picture</h2>
+<form method="POST" action="/upload" enctype="multipart/form-data">
+<input type="hidden" name="MAX_FILE_SIZE" value="10000000">
+<input type="file" id="filedata" name="filedata" size="20">
+<br>
+<label for="description">Description</label>
+<textarea cols=40 rows=3 id="description" name="description">Gr&auml;s
+two lines</textarea>
+<br>
+<input type=checkbox id="private" name="private" checked> <label for="private">Private</label>
+<br>
+<input id="upload" name="upload" type="submit" value="Upload">
+</form>
+</body></html>

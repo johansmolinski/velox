@@ -37,7 +37,8 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
 - Tables, lists, preformatted text, headings, horizontal rules, images
   floated left or right with the text flowing around them
 - Forms: text, password, checkboxes, radio buttons, selects, text areas;
-  GET and POST
+  GET and POST; files sent (chosen with a file requester, the form
+  as multipart/form-data)
 - Images: JPEG (baseline and progressive), PNG (all kinds, with
   transparency), GIF and WebP (lossy, lossless, with alpha) decoded by
   Velox itself, dithered to the screen's colours (backgrounds: the

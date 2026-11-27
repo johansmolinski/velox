@@ -8,6 +8,7 @@
 ;
 
 	include	"velox.i"
+	include	"lvo/asl_lib.i"
 
 	xdef	FormStateOf,FormControlSize,FormIsControl,FormActivate
 	xdef	FormEditKey,FormSubmit,FormLeave,FormFocus
@@ -18,8 +19,10 @@
 	xref	EdMove,EdType,EdBack,EdDel,EdSelAll,EdSel,EdUndo,EdRedo,ClipCopyN,ClipPaste
 	xdef	FormCopy
 	xref	NavGo,NavPost,GuiPaintAll,GuiStatus,GuiPaintNode
+	xref	GuiRelayout,TaskNow,BufReserve,StrCopyN,LogEvent
 
 DEFAULT_MAX	equ	1024		; text input capacity without maxlength
+FILE_PATH	equ	300		; a file to send: its path
 FIELD_MAX	equ	4096
 TEXTAREA_MAX	equ	8192
 
@@ -122,6 +125,8 @@ FormStateOf:
 	bls.s	.field			; FK_TEXT, FK_PASSWORD
 	cmp.b	#FK_HIDDEN,d2
 	beq.s	.hidden
+	cmp.b	#FK_FILE,d2
+	beq	.file
 	cmp.b	#FK_RADIO,d2
 	bhi.s	.button
 	; checkbox / radio
@@ -165,6 +170,25 @@ FormStateOf:
 	beq	.done
 	move.l	d0,a0
 	bsr	SetValue
+	bra	.done
+
+.file:	move.l	#FILE_PATH,fs_Max(a3)	; a file to send: its path the
+	bsr	AllocValue		; value (ChooseFile), its name the
+	beq	.fail			; label (a copy in the page: page
+	lea	SChoose(pc),a0		; files keep no pointer out of it)
+	move.l	a0,a1
+.fl:	tst.b	(a1)+
+	bne.s	.fl
+	move.l	a1,d0
+	sub.l	a0,d0
+	move.l	a0,-(sp)
+	jsr	PageAlloc
+	movem.l	(sp)+,a0
+	move.l	d0,fs_Label(a3)
+	beq	.done
+	move.l	d0,a1
+.fc:	move.b	(a0)+,(a1)+
+	bne.s	.fc
 	bra	.done
 
 .textarea:
@@ -498,6 +522,10 @@ FormActivate:
 	beq.s	.reset
 	cmp.b	#FK_SELECT,d0
 	beq.s	.select
+	cmp.b	#FK_FILE,d0
+	bne.s	.x
+	move.l	a5,a0			; a file to send
+	bsr	ChooseFile
 	bra.s	.x
 .edit:	move.l	g_EditField(a4),d0	; (another field: it shows no
 	cmp.l	a5,d0			;  cursor any more; this one edited
@@ -987,9 +1015,18 @@ FormSubmit:
 	move.l	d0,a5			; a5 = form
 	lea	g_FormBuf(a4),a0
 	jsr	BufClear
-	move.l	a5,a0
+	move.l	a5,a0			; POST with enctype multipart/form-
+	bsr	IsMultipart		;  data: its parts (g_FormMulti)
+	move.l	d0,g_FormMulti(a4)
+	beq.s	.flds
+	bsr	MpBound
+.flds:	move.l	a5,a0
 	lea	AddField(pc),a1
 	bsr	ForControls
+	tst.l	g_FormMulti(a4)
+	beq.s	.flde
+	bsr	MpEnd
+.flde:
 	; action URL, resolved against the page (or <base href>)
 	move.l	a5,a0
 	lea	AnAction(pc),a1
@@ -1033,6 +1070,7 @@ FormSubmit:
 	lea	g_LinkUrl(a4),a0
 	move.l	g_FormBuf+buf_Data(a4),a1
 	move.l	g_FormBuf+buf_Len(a4),d0
+	move.l	g_FormMulti(a4),d1
 	jsr	NavPost
 	bra.s	.x
 .get:	; GET: replace the query of the action URL with the form data
@@ -1061,7 +1099,8 @@ FormSubmit:
 	lea	g_LinkUrl(a4),a0	; (the tab in G, either way)
 	moveq	#NAV_HISTORY,d0
 	jsr	NavGo
-.x:	movem.l	(sp)+,d2/a2-a3/a5
+.x:	clr.l	g_FormMulti(a4)
+	movem.l	(sp)+,d2/a2-a3/a5
 	rts
 
 ; BufMove - Buf a0's data becomes Buf a1's (a0 empty after)
@@ -1108,6 +1147,8 @@ AddField:
 	beq.s	.select
 	cmp.b	#FK_IMAGE,d0
 	beq.s	.image
+	cmp.b	#FK_FILE,d0
+	beq	.file
 	cmp.b	#FK_SUBMIT,d0		; buttons: only the one pressed
 	bne	.x
 	cmp.l	g_Submitter(a4),a5
@@ -1146,7 +1187,17 @@ AddField:
 	bra.s	.pair
 .image:	cmp.l	g_Submitter(a4),a5	; name.x=0&name.y=0
 	bne	.x
-	bsr	Amp
+	tst.l	g_FormMulti(a4)
+	beq.s	.imu
+	move.l	a2,a0			; (multipart: two parts)
+	lea	SDotX(pc),a1
+	lea	SZero(pc),a3
+	bsr	MpPart
+	move.l	a2,a0
+	lea	SDotY(pc),a1
+	bsr	MpPart
+	bra	.x
+.imu:	bsr	Amp
 	move.l	a2,a0
 	bsr	Encode
 	lea	SImgX(pc),a1
@@ -1159,8 +1210,24 @@ AddField:
 	lea	g_FormBuf(a4),a0
 	jsr	BufAppendStr
 	bra.s	.x
+.file:	tst.l	g_FormMulti(a4)		; a file: multipart, its bytes;
+	beq.s	.fname			; else its name
+	move.l	a2,a0
+	move.l	fs_Value(a3),a1
+	bsr	MpFile
+	bra.s	.x
+.fname:	move.l	fs_Value(a3),d1
+	DOS	FilePart
+	bra.s	.pair
 .pair:	move.l	d0,d2			; d2 = value
-	bsr	Amp
+	tst.l	g_FormMulti(a4)
+	beq.s	.amp
+	move.l	a2,a0			; (multipart: a part)
+	suba.l	a1,a1
+	move.l	d2,a3
+	bsr	MpPart
+	bra.s	.x
+.amp:	bsr	Amp
 	move.l	a2,a0
 	bsr	Encode
 	lea	g_FormBuf(a4),a0
@@ -1268,6 +1335,352 @@ IsUnreserved:
 	rts
 .y:	moveq	#1,d1
 	rts
+
+;--------------------------------------------------------------------
+; Files to send: <input type=file>, a form sent as multipart/form-data
+;--------------------------------------------------------------------
+
+; ChooseFile - (FormActivate) the file to send of file field a0, asked
+; for with a file requester (from the drawer used last): its path the
+; field's value, its name the label
+ChooseFile:
+	movem.l	d2-d4/a2-a3/a5,-(sp)
+	move.l	a0,a5
+	bsr	FormStateOf
+	tst.l	d0
+	beq	.x
+	move.l	d0,a3
+	moveq	#0,d4			; d4 = chosen
+	lea	AslName(pc),a1
+	moveq	#38,d0
+	EXEC	OpenLibrary
+	move.l	d0,g_AslBase(a4)
+	beq	.nolib
+	clr.l	-(sp)			; the tags (read upwards)
+	pea	1.w
+	move.l	#ASLFR_SleepWindow,-(sp)
+	pea	g_DownloadDir(a4)
+	move.l	#ASLFR_InitialDrawer,-(sp)
+	move.l	g_Window(a4),-(sp)
+	move.l	#ASLFR_Window,-(sp)
+	pea	TitleChoose(pc)
+	move.l	#ASLFR_TitleText,-(sp)
+	moveq	#ASL_FileRequest,d0
+	move.l	sp,a0
+	move.l	g_AslBase(a4),a6
+	jsr	_LVOAllocAslRequest(a6)
+	move.l	d0,a2
+	tst.l	d0
+	beq.s	.tags
+	move.l	a2,a0
+	suba.l	a1,a1
+	move.l	g_AslBase(a4),a6
+	jsr	_LVOAslRequest(a6)
+	tst.l	d0
+	beq.s	.free			; (cancelled)
+	move.l	fr_Drawer(a2),a0	; that drawer the next time
+	lea	g_DownloadDir(a4),a1
+	move.l	#255,d0
+	jsr	StrCopyN
+	move.l	fr_Drawer(a2),a0	; the path: drawer + file
+	lea	g_UrlTmp2(a4),a1
+	move.l	#URL_MAX-1,d0
+	jsr	StrCopyN
+	lea	g_UrlTmp2(a4),a0
+	move.l	a0,d1
+	move.l	fr_File(a2),d2
+	move.l	#URL_MAX,d3
+	DOS	AddPart
+	lea	g_UrlTmp2(a4),a0
+	bsr	SetValue
+	lea	LogFile(pc),a0		; (for tests: "file PATH")
+	move.l	fs_Value(a3),a1
+	move.l	#$80000000,d0
+	jsr	LogEvent
+	move.l	fs_Value(a3),d1
+	DOS	FilePart
+	move.l	d0,fs_Label(a3)
+	moveq	#1,d4
+	move.l	d4,g_FormTouched(a4)
+.free:	move.l	a2,a0
+	move.l	g_AslBase(a4),a6
+	jsr	_LVOFreeAslRequest(a6)
+.tags:	lea	36(sp),sp
+	move.l	g_AslBase(a4),a1
+	clr.l	g_AslBase(a4)
+	EXEC	CloseLibrary
+	tst.l	d4			; (its label: another width)
+	beq.s	.x
+	jsr	GuiRelayout
+	bra.s	.x
+.nolib:	lea	MsgNoAsl(pc),a0
+	jsr	GuiStatus
+.x:	movem.l	(sp)+,d2-d4/a2-a3/a5
+	rts
+
+; IsMultipart - is form a0 sent with POST as multipart/form-data?
+; Out: d0 = 1 if so (CCR set)
+IsMultipart:
+	move.l	a0,-(sp)
+	lea	AnMethod(pc),a1
+	jsr	DomGetAttr
+	move.l	(sp)+,a0
+	tst.l	d0
+	beq.s	.no
+	move.l	a0,-(sp)
+	move.l	d0,a0
+	lea	SPost(pc),a1
+	jsr	StrIPrefix
+	move.l	(sp)+,a0
+	tst.l	d0
+	beq.s	.no
+	lea	AnEnctype(pc),a1
+	jsr	DomGetAttr
+	tst.l	d0
+	beq.s	.no
+	move.l	d0,a0
+	lea	SMultipart(pc),a1
+	jsr	StrIPrefix
+	tst.l	d0
+	beq.s	.no
+	moveq	#1,d0
+	rts
+.no:	moveq	#0,d0
+	rts
+
+; MpBound - a boundary for the parts (g_FormBound): not in them, as
+; good as certain
+MpBound:
+	lea	SBound(pc),a0
+	lea	g_FormBound(a4),a1
+.c:	move.b	(a0)+,(a1)+
+	bne.s	.c
+	subq.l	#1,a1
+	move.l	a1,-(sp)
+	jsr	TaskNow			; (8 hex digits of the time)
+	move.l	(sp)+,a1
+	moveq	#8-1,d1
+.h:	rol.l	#4,d0
+	move.l	d0,-(sp)
+	and.w	#15,d0
+	move.b	HexU(pc,d0.w),(a1)+
+	move.l	(sp)+,d0
+	dbf	d1,.h
+	clr.b	(a1)
+	rts
+
+; MpEnd - the closing boundary
+MpEnd:	bsr	MpDash
+	lea	SDash2(pc),a0
+	bsr	MpStr
+	lea	SCrLf(pc),a0
+	bra	MpStr
+
+; MpDash - "--" and the boundary
+MpDash:	lea	SDash2(pc),a0
+	bsr	MpStr
+	lea	g_FormBound(a4),a0
+	bra	MpStr
+
+; MpStr - string a0 to the form data
+MpStr:	move.l	a0,a1
+	lea	g_FormBuf(a4),a0
+	jmp	BufAppendStr
+
+; MpHead - a part's head for name a0 (with a1 after it, or 0): boundary,
+; Content-Disposition (no line end yet)
+MpHead:	movem.l	a2-a3,-(sp)
+	move.l	a0,a2
+	move.l	a1,a3
+	bsr	MpDash
+	lea	SDisp(pc),a0
+	bsr	MpStr
+	move.l	a2,a0
+	bsr	MpName
+	move.l	a3,d0
+	beq.s	.q
+	move.l	a3,a0
+	bsr	MpStr
+.q:	lea	SQuote(pc),a0
+	bsr	MpStr
+	movem.l	(sp)+,a2-a3
+	rts
+
+; MpPart - a part: name a0 (with a1 after it, or 0), value a3 (a3 kept)
+MpPart:	bsr	MpHead
+	lea	SCrLf2(pc),a0
+	bsr	MpStr
+	move.l	a3,a0
+	moveq	#0,d0			; (text: line ends CR LF)
+	bsr	MpText
+	lea	SCrLf(pc),a0
+	bra	MpStr
+
+; MpFile - a file's part: name a0, path a1: its name, its type (from
+; its name), its bytes (none if it cannot be read)
+MpFile:	movem.l	d2-d4/a2-a3,-(sp)
+	move.l	a1,a3			; a3 = path
+	suba.l	a1,a1
+	bsr	MpHead
+	lea	SFileName(pc),a0
+	bsr	MpStr
+	move.l	a3,d1
+	DOS	FilePart
+	move.l	d0,a2			; a2 = its name
+	move.l	a2,a0
+	bsr	MpName
+	lea	SQuote(pc),a0
+	bsr	MpStr
+	lea	SCType(pc),a0
+	bsr	MpStr
+	move.l	a2,a0
+	bsr	FileType
+	bsr	MpStr
+	lea	SCrLf2(pc),a0
+	bsr	MpStr
+	tst.b	(a2)			; no file chosen: no bytes
+	beq.s	.end
+	move.l	a3,d1
+	move.l	#MODE_OLDFILE,d2
+	DOS	Open
+	move.l	d0,d4
+	beq.s	.end
+	move.l	d4,d1			; its length
+	moveq	#0,d2
+	moveq	#OFFSET_END,d3
+	DOS	Seek
+	move.l	d4,d1
+	moveq	#0,d2
+	moveq	#OFFSET_BEGINNING,d3
+	DOS	Seek
+	move.l	d0,d3			; d3 = bytes
+	ble.s	.close
+	lea	g_FormBuf(a4),a0
+	move.l	d3,d0
+	jsr	BufReserve
+	beq.s	.close
+	move.l	d4,d1
+	move.l	g_FormBuf+buf_Data(a4),d2
+	add.l	g_FormBuf+buf_Len(a4),d2
+	DOS	Read
+	tst.l	d0
+	ble.s	.close
+	add.l	d0,g_FormBuf+buf_Len(a4)
+.close:	move.l	d4,d1
+	DOS	Close
+.end:	lea	SCrLf(pc),a0
+	bsr	MpStr
+	movem.l	(sp)+,d2-d4/a2-a3
+	rts
+
+; MpName - a name in quotes: as MpText, a quote as %22
+MpName:	moveq	#1,d0
+
+; MpText - text a0 to the form data, in the page's character set; d0 =
+; 0: a line end as CR LF; 1: a quote as %22
+MpText:	movem.l	d2-d3/a2,-(sp)
+	move.l	a0,a2
+	move.l	d0,d3
+.l:	moveq	#0,d2
+	move.b	(a2)+,d2
+	beq.s	.x
+	tst.l	d3
+	bne.s	.nm
+	cmp.b	#10,d2			; line breaks as CR LF
+	bne.s	.put
+	moveq	#13,d0
+	bsr.s	.byte
+	bra.s	.put
+.nm:	cmp.b	#'"',d2
+	bne.s	.put
+	lea	SPct22(pc),a0
+	bsr	MpStr
+	bra.s	.l
+.put:	cmp.b	#$80,d2
+	blo.s	.raw
+	cmp.l	#CS_UTF8,g_PageCharset(a4)
+	bne.s	.raw
+	move.l	d2,d0			; two byte UTF-8
+	lsr.b	#6,d0
+	or.b	#$c0,d0
+	bsr.s	.byte
+	and.b	#$3f,d2
+	or.b	#$80,d2
+.raw:	move.l	d2,d0
+	bsr.s	.byte
+	bra.s	.l
+.x:	movem.l	(sp)+,d2-d3/a2
+	rts
+.byte:	lea	g_FormBuf(a4),a0
+	jmp	BufAppendByte
+
+; FileType - the type of file name a0 (by its extension)
+; Out: a0 = it
+FileType:
+	move.l	a0,a1			; its last '.'
+	suba.l	a0,a0
+.l:	move.b	(a1)+,d0
+	beq.s	.e
+	cmp.b	#'.',d0
+	bne.s	.l
+	move.l	a1,a0
+	bra.s	.l
+.e:	move.l	a0,d0
+	beq.s	.def
+	move.l	a0,d1			; d1 = the extension
+	lea	FileTypes(pc),a1
+.t:	tst.b	(a1)
+	beq.s	.def
+	move.l	d1,a0
+	movem.l	d1/a1,-(sp)
+	jsr	StrIPrefix
+	beq.s	.n
+	tst.b	(a0)			; the whole extension
+	bne.s	.n
+	movem.l	(sp)+,d1/a1
+.s:	tst.b	(a1)+			; its type follows
+	bne.s	.s
+	move.l	a1,a0
+	rts
+.n:	movem.l	(sp)+,d1/a1
+.s2:	tst.b	(a1)+			; the next: past both strings
+	bne.s	.s2
+.s3:	tst.b	(a1)+
+	bne.s	.s3
+	bra.s	.t
+.def:	lea	SOctet(pc),a0
+	rts
+
+FileTypes:
+	dc.b	"jpg",0,"image/jpeg",0,"jpeg",0,"image/jpeg",0
+	dc.b	"png",0,"image/png",0,"gif",0,"image/gif",0
+	dc.b	"webp",0,"image/webp",0,"iff",0,"image/x-ilbm",0
+	dc.b	"ilbm",0,"image/x-ilbm",0,"txt",0,"text/plain",0
+	dc.b	"htm",0,"text/html",0,"html",0,"text/html",0
+	dc.b	"pdf",0,"application/pdf",0,"zip",0,"application/zip",0
+	dc.b	"lha",0,"application/x-lha",0,"lzh",0,"application/x-lha",0
+	dc.b	0
+SOctet:		dc.b	"application/octet-stream",0
+SChoose:	dc.b	"Choose a file...",0
+TitleChoose:	dc.b	"Choose a file to send",0
+LogFile:	dc.b	"file",0
+AslName:	dc.b	"asl.library",0
+MsgNoAsl:	dc.b	"asl.library is missing",0
+AnEnctype:	dc.b	"enctype",0
+SMultipart:	dc.b	"multipart/form-data",0
+SBound:		dc.b	"VeloxFormBoundary",0
+SDash2:		dc.b	"--",0
+SCrLf2:		dc.b	13,10
+SCrLf:		dc.b	13,10,0
+SDisp:		dc.b	13,10,"Content-Disposition: form-data; name=",34,0
+SQuote:		dc.b	34,0
+SFileName:	dc.b	"; filename=",34,0
+SCType:		dc.b	13,10,"Content-Type: ",0
+SPct22:		dc.b	"%22",0
+SDotX:		dc.b	".x",0
+SDotY:		dc.b	".y",0
+SZero:		dc.b	"0",0
+	even
 
 AnType:		dc.b	"type",0
 AnCols:		dc.b	"cols",0

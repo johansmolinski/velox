@@ -1,0 +1,14 @@
+#!/bin/sh
+# checks for upload.script: the server got the file whole (test.png's
+# MD5), its name and type, and the other fields (UTF-8, CR LF)
+d=$(dirname "$1"); fail=0
+sed 's/^/driver: /' "$d/upload.driver"
+grep "UPLOAD" "$d/../server.log" | sed 's/^/server: /'
+md5=$(md5sum "$(dirname "$0")/../www/test.png" | cut -d' ' -f1)
+grep -q "UPLOAD filedata file=pic.png type=image/png size=$(stat -c %s "$(dirname "$0")/../www/test.png") md5=$md5" "$d/../server.log" || { echo "the file did not come whole"; fail=1; }
+grep -q "UPLOAD private=on" "$d/../server.log" || { echo "no checkbox"; fail=1; }
+grep -q "UPLOAD upload=Upload" "$d/../server.log" || { echo "no submit button"; fail=1; }
+grep -q "UPLOAD MAX_FILE_SIZE=10000000" "$d/../server.log" || { echo "no hidden field"; fail=1; }
+grep -q "UPLOAD description=Gräs" "$d/../server.log" || { echo "the text not UTF-8"; fail=1; }
+grep -q '^ok$' "$d/upload.driver" || fail=1
+exit $fail

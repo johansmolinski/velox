@@ -1896,11 +1896,12 @@ ShowDone:
 
 ;--------------------------------------------------------------------
 ; NavPost - submit data with POST and show the result
-; In: a0 = URL, a1 = body, d0 = body length
+; In: a0 = URL, a1 = body, d0 = body length, d1 = 1 if multipart/form-data
 ;--------------------------------------------------------------------
 NavPost:
 	move.l	a1,g_PostData(a4)
 	move.l	d0,g_PostLen(a4)
+	move.l	d1,g_PostMulti(a4)
 	clr.l	g_Doc(a4)		; never a "same page" fragment jump
 	moveq	#NAV_HISTORY,d0
 	bra	NavGo

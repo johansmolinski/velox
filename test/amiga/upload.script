@@ -1,0 +1,9 @@
+; upload: a file sent with a form as multipart/form-data: chosen with
+; the file requester (test/amiga/upload.host)
+SetEnv Velox/DownloadDir VELOX:t
+Echo >VELOX:r/upload.txt "upload"
+Echo >VELOX:r/upload.start ""
+VELOX:velox http://127.0.0.1:8080/upload.html LOG=VELOX:r/upload.log
+Echo >>VELOX:r/upload.txt "exit rc=$RC"
+UnSetEnv Velox/DownloadDir
+Echo >>VELOX:r/upload.txt "done"

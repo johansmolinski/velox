@@ -57,6 +57,7 @@ HttpGet:
 .redir:	cmp.l	#307,d2			; 301-303: the next request is a GET
 	bhs.s	.keep
 	clr.l	g_PostData(a4)
+	clr.l	g_PostMulti(a4)
 .keep:	addq.l	#1,d3
 	cmp.l	#MAX_REDIRECTS,d3
 	bhi.s	.toomany
@@ -78,7 +79,8 @@ HttpGet:
 	jsr	CacheStore
 	jsr	DcStore			; (pages and style sheets on disk)
 .nost:	move.l	d2,d0
-.x:	clr.l	g_PostData(a4)		; a POST body is used once
+.x:	clr.l	g_PostData(a4)
+	clr.l	g_PostMulti(a4)		; a POST body is used once
 	clr.b	g_CondETag(a4)		; (and so is a revalidation)
 	clr.b	g_CondLM(a4)
 	tst.l	d0			; (the clr changed the flags)
@@ -397,8 +399,24 @@ BuildRequest:
 	beq	ReqNoMem
 	tst.l	g_PostData(a4)
 	beq.s	.nopost
-	REQSTR	RqPostHdr
-	lea	-16(sp),sp
+	tst.l	g_PostMulti(a4)		; multipart: its boundary is the
+	beq.s	.urlenc			; body's first line, after "--"
+	REQSTR	RqMultiHdr
+	move.l	g_PostData(a4),a1
+	addq.l	#2,a1
+	move.l	a1,a0
+.bl:	cmp.b	#13,(a0)+
+	bne.s	.bl
+	move.l	a0,d0
+	sub.l	a1,d0
+	subq.l	#1,d0
+	lea	g_ReqBuf(a4),a0
+	jsr	BufAppend
+	beq	ReqNoMem
+	REQSTR	RqLenHdr
+	bra.s	.plen
+.urlenc:	REQSTR	RqPostHdr
+.plen:	lea	-16(sp),sp
 	move.l	g_PostLen(a4),d0
 	move.l	sp,a0
 	jsr	FmtDec
@@ -475,8 +493,9 @@ SchHttpsP:	dc.b	"https://",0
 HexDigits:	dc.b	"0123456789ABCDEF"
 RqGet:		dc.b	"GET ",0
 RqPost:		dc.b	"POST ",0
+RqMultiHdr:	dc.b	13,10,"Content-Type: multipart/form-data; boundary=",0
 RqPostHdr:	dc.b	13,10,"Content-Type: application/x-www-form-urlencoded"
-		dc.b	13,10,"Content-Length: ",0
+RqLenHdr:	dc.b	13,10,"Content-Length: ",0
 RqHost:		dc.b	" HTTP/1.1",13,10,"Host: ",0
 RqTail:		dc.b	13,10
 		dc.b	"User-Agent: Velox/"

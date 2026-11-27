@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""Host side of upload.script: the file field (Tab, Return) opens the
+file requester, in VELOX:t; pic.png typed and chosen; the form sent."""
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from xdrive import Amiga, wait_log  # noqa: E402
+
+r = sys.argv[1]
+log = os.path.join(r, "upload.log")
+out = open(os.path.join(r, "upload.driver"), "w")
+U = "http://127.0.0.1:8080/"
+
+
+def step(msg):
+    out.write(msg + "\n")
+    out.flush()
+
+
+try:
+    a = Amiga()
+    wait_log(log, "page " + U + "upload.html")
+    time.sleep(1)
+    a.key("Tab")
+    wait_log(log, "focus filedata")
+    a.key("Return")             # the file requester
+    time.sleep(4)
+    a.shot(os.path.join(r, "upload-req.png"))
+    a.type("pic.png")
+    a.key("Return")
+    wait_log(log, "file VELOX:t/pic.png", timeout=30)
+    step("chosen: VELOX:t/pic.png")
+    time.sleep(1)
+    a.shot(os.path.join(r, "upload-chosen.png"))
+    a.key("Tab", 3)             # description, private, Upload
+    wait_log(log, "focus upload")
+    a.key("Return")
+    wait_log(log, "page " + U + "upload")
+    step("sent")
+    a.key("ctrl+q")
+    step("ok")
+except Exception as e:
+    step("FAIL " + repr(e))
+    try:
+        Amiga().key("ctrl+q")
+    except Exception:
+        pass

@@ -18,3 +18,4 @@ pagefile test/www/form.html 400 => saved same, laid out again: same
 pagefile test/www/third.html 400 => saved same, laid out again: same
 pagefile test/www/big.html 400 => saved same, laid out again: same
 pagefile test/www/busy.html 400 => saved same, laid out again: same
+pagefile test/unit/layout/grid.html 400 => saved same, laid out again: same

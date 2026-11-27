@@ -33,7 +33,7 @@
 	xref	DomGetAttr,ParseDec,LayoutTable,CssApply,CssTableMode
 	xref	IsAtomic,InlineBlock
 	xref	FormIsControl,FormControlSize,CssInvalidate,TaskPoll,BufFree,LogEvent
-	xref	ViewSelect,LayoutFlex
+	xref	ViewSelect,LayoutFlex,LayoutGrid
 
 	IFNE	RUN_SIZEOF-32
 	FAIL	"RunCount/RunPtr assume RUN_SIZEOF = 32"
@@ -87,6 +87,7 @@ LayoutDocument:
 	clr.l	g_Marker(a4)
 	clr.l	g_LayDepth(a4)
 	clr.l	g_FlexDepth(a4)
+	clr.l	g_GridDepth(a4)
 	clr.l	g_FlLBot(a4)
 	clr.l	g_FlRBot(a4)
 	moveq	#1,d0
@@ -675,8 +676,12 @@ LayoutBlock:
 	bra.s	.after
 .content:
 	cmp.b	#DISP_FLEX,st_Display(a3)
-	bne.s	.kids
+	bne.s	.ngrid
 	jsr	LayoutFlex
+	bra.s	.after
+.ngrid:	cmp.b	#DISP_GRID,st_Display(a3)
+	bne.s	.kids
+	jsr	LayoutGrid
 	bra.s	.after
 .kids:	bsr	LayoutChildren
 .after:	bsr	FlushLine

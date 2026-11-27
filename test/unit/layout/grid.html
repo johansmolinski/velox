@@ -1,0 +1,18 @@
+<html><head><style>
+.g { display: grid; grid-template-columns: 100px 1fr 2fr; gap: 10px }
+.g div { background: #ccc }
+.a { display: grid; grid-template-areas: "head head" "side main" "foot foot"; grid-template-columns: 80px 1fr }
+.a div { background: #eee }
+.h { grid-area: head } .s { grid-area: side } .m { grid-area: main } .f { grid-area: foot }
+.r { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 4px }
+.sp { grid-column: 1 / -1 } .s2 { grid-column: span 2 }
+.c { display: grid; grid-template-columns: auto auto; align-items: center }
+.p { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto }
+.p .x { grid-column: 2; grid-row: 1 } .p .y { grid-column: 1; grid-row: 1 }
+</style></head><body>
+<div class="g"><div>A</div><div>B</div><div>C</div><div>D</div><div class="sp">E full</div><div class="s2">F two</div><div>G</div></div>
+<div class="a"><div class="f">Foot</div><div class="h">Head</div><div class="m">Main text here, long enough to wrap in its column</div><div class="s">Side</div></div>
+<div class="r"><div>1</div><div>2</div><div>3</div><div>4</div><div>5</div></div>
+<div class="c"><div>tall<br>two lines</div><div>middle</div></div>
+<div class="p"><div class="x">placed second</div><div class="y">placed first</div><div>after</div></div>
+</body></html>

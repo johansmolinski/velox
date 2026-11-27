@@ -26,7 +26,10 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
   fonts, margins, padding, borders (solid, one colour), widths, table
   heights, alignment, display, media
   queries; flexbox (rows and columns: grow, shrink, basis, wrap, gap,
-  justify-content, align-items, auto margins, order); CSS tables
+  justify-content, align-items, auto margins, order); CSS grid
+  (`grid-template-columns` with px, %, fr, auto, `minmax()`,
+  `repeat()` also auto-fill; `grid-template-areas` and `grid-area`;
+  `grid-column`/`grid-row` lines and spans; gaps, align-items); CSS tables
   (`display: table`, `table-row`, `table-cell` on any element, also
   `table-layout: fixed`); image sizes from CSS (`width`, `height`,
   `max-width`, `max-height`); `inline-block` and `inline-flex` boxes;

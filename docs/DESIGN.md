@@ -484,6 +484,7 @@ JS is not on the roadmap yet, but it must stay possible to add. That means:
 | forms.s     | form controls, their keys, submission                           |
 | edit.s      | editing a field or text area: soft-wrapped lines, moves, selection, undo |
 | flex.s      | flexbox: items in rows (measured as table cells) or columns       |
+| grid.s      | CSS grid: column tracks, items placed by lines, areas or in order |
 | iblock.s    | inline-blocks (and floats other than images): one box on a line  |
 | sheetcache.s | linked style sheets kept parsed (rules, custom properties) for the next pages |
 | visits.s    | the pages visited (ENVARC:Velox/Visited), matching a text typed   |

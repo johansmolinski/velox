@@ -313,7 +313,14 @@ st_MaxH		rs.w	1		;  its pixels), an image's max-height
 st_BW		rs.b	4		; border widths t r b l (px; also in
 					; st_MTop..: not inherited; colour:
 					; st_Edge, -1 the text's)
+st_GridT	rs.l	1		; grid (none inherited): the columns
+st_GridA	rs.l	1		; and areas (the value's text) or 0;
+st_GridC	rs.l	1		; an item's column, row: start.w (a
+st_GridR	rs.l	1		; line, 0 auto), end.w (a line, 0 auto,
+					; GSPAN + n span n)
+st_GridN	rs.l	1		; ... grid-area: its name (text) or 0
 STYLE_SIZEOF	rs.b	0
+GSPAN		equ	$4000
 SK_GEN		equ	0		; n_Style (style.s): g_StyleGen,
 SK_PARENT	equ	4		; the parent's style,
 SK_STYLE	equ	4+STYLE_SIZEOF	; the element's
@@ -696,6 +703,7 @@ g_MarkerNum	rs.l	1
 g_ListNum	rs.l	1		; counter of the innermost list
 g_LayDepth	rs.l	1
 g_FlexDepth	rs.l	1		; flex.s: flex containers we are in
+g_GridDepth	rs.l	1		; grid.s: grid containers we are in
 g_MeasMin	rs.l	1		; table measuring
 g_MeasPref	rs.l	1
 g_MeasLine	rs.l	1

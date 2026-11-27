@@ -59,7 +59,7 @@ TAGS = [
 # User agent style per tag: (display, font op, soft, margin class, flags)
 DISP = {"inline": 0, "block": 1, "listitem": 2, "none": 3, "table": 4,
         "row": 5, "cell": 6, "iblock": 7, "rowgroup": 8, "caption": 9,
-        "flex": 10}  # (flex: CSS only, flex.s)
+        "flex": 10, "grid": 11}  # (flex, grid: CSS only, flex.s, grid.s)
 FONT = {"": 0, "mono": 1, "smaller": 2, "larger": 3, "h1": 4, "h2": 5, "h3": 6,
         "h4": 7, "h5": 8, "h6": 9}
 SOFT = {"": 0, "b": 2, "i": 4, "u": 1}  # graphics FSF_ bits

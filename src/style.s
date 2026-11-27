@@ -158,6 +158,11 @@ StyleCompute:
 	clr.l	st_FlexF+4(a3)
 	clr.l	st_MaxW(a3)		; (st_MaxW, st_MaxH)
 	clr.l	st_BW(a3)
+	clr.l	st_GridT(a3)		; (st_GridT .. st_GridN)
+	clr.l	st_GridA(a3)
+	clr.l	st_GridC(a3)
+	clr.l	st_GridR(a3)
+	clr.l	st_GridN(a3)
 	and.b	#(~(SF_MAUTO|SF_FLOATL|SF_FLOATR|SF_MAUTOL|SF_MAUTOR|SF_TFIXED|SF_IBLK))&$ff,st_Flags(a3)
 
 	; user agent defaults

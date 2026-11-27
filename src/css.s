@@ -125,6 +125,16 @@ CP_BTC		rs.b	1		; border-top-color ..
 CP_BRC		rs.b	1
 CP_BBC		rs.b	1
 CP_BLC		rs.b	1
+CP_GTCOLS	rs.b	1		; grid-template-columns
+CP_GTAREAS	rs.b	1		; grid-template-areas
+CP_GTEMPL	rs.b	1		; grid-template
+CP_GCOL		rs.b	1		; grid-column, -start, -end
+CP_GCOLS	rs.b	1
+CP_GCOLE	rs.b	1
+CP_GROW_	rs.b	1		; grid-row, -start, -end
+CP_GROWS	rs.b	1
+CP_GROWE	rs.b	1
+CP_GAREA	rs.b	1		; grid-area
 CP_COUNT	rs.b	0
 
 	section	code,code
@@ -1811,6 +1821,18 @@ PropNames:
 	PN	CP_BRC,"border-right-color"
 	PN	CP_BBC,"border-bottom-color"
 	PN	CP_BLC,"border-left-color"
+	PN	CP_GTCOLS,"grid-template-columns"
+	PN	CP_GTAREAS,"grid-template-areas"
+	PN	CP_GTEMPL,"grid-template"
+	PN	CP_GCOL,"grid-column"
+	PN	CP_GCOLS,"grid-column-start"
+	PN	CP_GCOLE,"grid-column-end"
+	PN	CP_GROW_,"grid-row"
+	PN	CP_GROWS,"grid-row-start"
+	PN	CP_GROWE,"grid-row-end"
+	PN	CP_GAREA,"grid-area"
+	PN	CP_COLGAP,"grid-column-gap"
+	PN	CP_ROWGAP,"grid-row-gap"
 	dc.b	0
 	even
 
@@ -3391,6 +3413,10 @@ PropJump:
 	dc.w	PBSideS-PropJump
 	dc.w	PBColor-PropJump,PBColor-PropJump,PBColor-PropJump
 	dc.w	PBColor-PropJump
+	dc.w	PGridCols-PropJump,PGridAreas-PropJump,PGridTempl-PropJump
+	dc.w	PGridLine-PropJump,PGridLine-PropJump,PGridLine-PropJump
+	dc.w	PGridLine-PropJump,PGridLine-PropJump,PGridLine-PropJump
+	dc.w	PGridArea-PropJump
 	IFNE	(*-PropJump)-2*CP_COUNT
 	FAIL	"PropJump: one entry per CP_xxx"
 	ENDC
@@ -3702,6 +3728,216 @@ PRowGap:
 	move.b	d0,st_RGap(a3)
 	rts
 
+; Grid (grid.s lays it out): the templates' texts are kept (st_GridT,
+; st_GridA), an item's lines read (st_GridC, st_GridR: start.w, end.w),
+; its area's name kept (st_GridN)
+
+; PGridCols - grid-template-columns: its text (none: 0)
+PGridCols:
+	bsr	GridNone
+	move.l	d0,st_GridT(a3)
+	rts
+
+; PGridAreas - grid-template-areas: its text (none: 0)
+PGridAreas:
+	bsr	GridNone
+	move.l	d0,st_GridA(a3)
+	rts
+
+; GridNone - value a2, or 0 if it is "none"  Out: d0
+GridNone:
+	move.l	a2,a0
+	bsr	SkipWs
+	lea	KwNone(pc),a1
+	bsr	Kw
+	bne.s	.no
+	move.l	a0,d0
+	rts
+.no:	moveq	#0,d0
+	rts
+
+; PGridTempl - grid-template: "areas" ... [/ columns], or rows /
+; columns: the areas (if quoted) and the columns after the '/'
+PGridTempl:
+	bsr	GridNone
+	beq.s	.none
+	move.l	d0,a0
+	clr.l	st_GridA(a3)
+	cmp.b	#'"',(a0)
+	beq.s	.ar
+	cmp.b	#39,(a0)
+	bne.s	.sl
+.ar:	move.l	a0,st_GridA(a3)
+.sl:	clr.l	st_GridT(a3)		; the columns: after a '/' (outside
+	moveq	#0,d1			;  quotes)
+.l:	move.b	(a0)+,d0
+	beq.s	.x
+	cmp.b	#'"',d0
+	beq.s	.q
+	cmp.b	#39,d0
+	beq.s	.q
+	cmp.b	#'/',d0
+	bne.s	.l
+	move.l	a0,st_GridT(a3)
+	rts
+.q:	move.b	(a0)+,d1		; (a quoted string)
+	beq.s	.x
+	cmp.b	d0,d1
+	bne.s	.q
+	bra.s	.l
+.none:	clr.l	st_GridT(a3)
+	clr.l	st_GridA(a3)
+.x:	rts
+
+; PGridLine - grid-column, grid-row (start [/ end]), and their -start,
+; -end: into st_GridC / st_GridR (start.w, end.w)
+; In: d2 = CP_xxx (CP_GCOL .. CP_GROWE)
+PGridLine:
+	movem.l	d2-d3,-(sp)		; (d2: the CP_xxx, ApplyProp's)
+	lea	st_GridC(a3),a1
+	cmp.l	#CP_GROW_,d2
+	blo.s	.c
+	lea	st_GridR(a3),a1
+	sub.l	#CP_GROW_-CP_GCOL,d2
+.c:	move.l	a1,-(sp)
+	move.l	a2,a0
+	bsr	GridLine		; d0 = the first
+	move.l	(sp)+,a1
+	cmp.l	#CP_GCOLS,d2		; -start
+	bne.s	.ne
+	move.w	d0,(a1)
+	bra.s	.x
+.ne:	cmp.l	#CP_GCOLE,d2		; -end
+	bne.s	.both
+	move.w	d0,2(a1)
+	bra.s	.x
+.both:	moveq	#0,d3			; start [/ end]
+	cmp.w	#GSPAN,d0		; (a span first: the end's)
+	blt.s	.st
+	move.w	d0,d3
+	moveq	#0,d0
+.st:	move.w	d0,(a1)
+	bsr	SkipWs
+	cmp.b	#'/',(a0)
+	bne.s	.e
+	addq.l	#1,a0
+	move.l	a1,-(sp)
+	bsr	GridLine
+	move.l	(sp)+,a1
+	move.w	d0,d3
+.e:	move.w	d3,2(a1)
+.x:	movem.l	(sp)+,d2-d3
+	rts
+
+; PGridArea - grid-area: a name (st_GridN), or row-start / column-start
+; [/ row-end / column-end]
+PGridArea:
+	move.l	a2,a0
+	bsr	SkipWs
+	move.b	(a0),d0			; a name: a letter, '_' or '-' first
+	cmp.b	#'-',d0
+	beq.s	.num
+	cmp.b	#'0',d0
+	blo.s	.name
+	cmp.b	#'9',d0
+	bls.s	.num
+	lea	KwSpan(pc),a1
+	bsr	Kw
+	bne.s	.num
+	lea	KwAuto(pc),a1
+	bsr	Kw
+	bne.s	.num
+.name:	move.l	a0,st_GridN(a3)
+	rts
+.num:	clr.l	st_GridN(a3)
+	bsr	GridLine		; row-start
+	move.w	d0,st_GridR(a3)
+	clr.w	st_GridR+2(a3)
+	clr.l	st_GridC(a3)
+	bsr	.next
+	bne.s	.x
+	bsr	GridLine		; column-start
+	move.w	d0,st_GridC(a3)
+	bsr	.next
+	bne.s	.x
+	bsr	GridLine		; row-end
+	move.w	d0,st_GridR+2(a3)
+	bsr	.next
+	bne.s	.x
+	bsr	GridLine		; column-end
+	move.w	d0,st_GridC+2(a3)
+.x:	rts
+.next:	bsr	SkipWs			; Out: Z clear if no '/' follows
+	cmp.b	#'/',(a0)
+	bne.s	.nn
+	addq.l	#1,a0
+	moveq	#0,d0
+	rts
+.nn:	moveq	#1,d0
+	rts
+
+; GridLine - a grid line at a0: a number (negative: from the end),
+; "span n", else (auto, a name) 0
+; Out: d0.w (GSPAN + n for a span), a0 after it
+GridLine:
+	bsr	SkipWs
+	lea	KwSpan(pc),a1
+	bsr	Kw
+	beq.s	.n
+	addq.l	#4,a0
+	bsr	SkipWs
+	bsr	.int
+	tst.l	d0
+	bgt.s	.sp
+	moveq	#1,d0
+.sp:	add.l	#GSPAN,d0
+	bra.s	.x
+.n:	move.b	(a0),d0
+	cmp.b	#'-',d0
+	beq.s	.i
+	sub.b	#'0',d0
+	cmp.b	#9,d0
+	bls.s	.i
+	moveq	#0,d0			; (a word: past it)
+.w:	move.b	(a0),d1
+	beq.s	.x
+	cmp.b	#' ',d1
+	bls.s	.x
+	cmp.b	#'/',d1
+	beq.s	.x
+	addq.l	#1,a0
+	bra.s	.w
+.i:	bsr	.int
+.x:	rts
+.int:	move.l	d2,-(sp)		; a signed integer (-99 .. 99)
+	moveq	#0,d1
+	cmp.b	#'-',(a0)
+	bne.s	.d0
+	moveq	#1,d1
+	addq.l	#1,a0
+.d0:	moveq	#0,d0
+.d:	move.b	(a0),d2
+	sub.b	#'0',d2
+	cmp.b	#9,d2
+	bhi.s	.de
+	mulu.w	#10,d0
+	ext.w	d2
+	add.w	d2,d0
+	addq.l	#1,a0
+	cmp.w	#99,d0
+	bls.s	.d
+	moveq	#99,d0
+	bra.s	.d
+.de:	ext.l	d0
+	tst.l	d1
+	beq.s	.dr
+	neg.l	d0
+.dr:	movem.l	(sp)+,d2
+	rts
+
+KwSpan:	dc.b	"span",0
+	even
+
 ; GapLen - a length at a0 in our pixels, 0 - 255 (normal, %: 0)
 ; Out: d0, a0 after it
 GapLen:
@@ -3780,8 +4016,8 @@ DISP_IFLEX	equ	$40		; (DisplayKw: inline-flex)
 DisplayKw:
 	dc.b	DISP_NONE,"none",0,DISP_BLOCK,"block",0,DISP_INLINE,"inline",0
 	dc.b	DISP_IBLOCK,"inline-block",0,DISP_IFLEX,"inline-flex",0
-	dc.b	DISP_INLINE,"inline-grid",0,DISP_INLINE,"contents",0
-	dc.b	DISP_FLEX,"flex",0,DISP_BLOCK,"grid",0,DISP_BLOCK,"flow-root",0
+	dc.b	DISP_GRID,"inline-grid",0,DISP_INLINE,"contents",0
+	dc.b	DISP_FLEX,"flex",0,DISP_GRID,"grid",0,DISP_BLOCK,"flow-root",0
 	dc.b	DISP_LISTITEM,"list-item",0,DISP_TABLE,"table",0
 	dc.b	DISP_ROW,"table-row",0,DISP_CELL,"table-cell",0
 	dc.b	DISP_ROWGROUP,"table-row-group",0,DISP_ROWGROUP,"table-header-group",0

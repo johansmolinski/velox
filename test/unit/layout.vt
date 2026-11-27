@@ -27,3 +27,8 @@ layout test/unit/layout/iconlist.html 300
 # it, its paddings around it, its box-shadow an outline; a highlighted
 # span gets its background too
 layout test/unit/layout/linkbutton.html 300
+# CSS grid (grid.s): fixed and fr columns with gaps, spans (to line
+# -1, span 2); areas by name (the items in another order); repeat
+# (auto-fill, minmax()); auto columns from their content, align-items:
+# center; items placed by line before the others
+layout test/unit/layout/grid.html 400

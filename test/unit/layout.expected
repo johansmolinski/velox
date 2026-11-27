@@ -245,3 +245,44 @@ rect 26 48 88 10 8 f1 s0 cffff00
 text 26 48 88 10 8 f1 s0 c000000 "highlighted"
 text 26 144 48 10 8 f1 s0 c000000 "words."
 
+# CSS grid (grid.s): fixed and fr columns with gaps, spans (to line
+# -1, span 2); areas by name (the items in another order); repeat
+# (auto-fill, minmax()); auto columns from their content, align-items:
+# center; items placed by line before the others
+layout test/unit/layout/grid.html 400 => 
+height 148
+rect 0 8 62 10 0 f0 s0 ccccccc
+text 0 8 8 10 8 f1 s0 c000000 "A"
+rect 0 76 103 10 0 f0 s0 ccccccc
+text 0 76 8 10 8 f1 s0 c000000 "B"
+rect 0 185 206 10 0 f0 s0 ccccccc
+text 0 185 8 10 8 f1 s0 c000000 "C"
+rect 16 8 62 10 0 f0 s0 ccccccc
+text 16 8 8 10 8 f1 s0 c000000 "D"
+rect 32 8 383 10 0 f0 s0 ccccccc
+text 32 8 48 10 8 f1 s0 c000000 "E full"
+rect 48 8 171 10 0 f0 s0 ccccccc
+text 48 8 40 10 8 f1 s0 c000000 "F two"
+rect 48 185 206 10 0 f0 s0 ccccccc
+text 48 185 8 10 8 f1 s0 c000000 "G"
+rect 58 8 384 10 0 f0 s0 ceeeeee
+text 58 8 32 10 8 f1 s0 c000000 "Head"
+rect 68 58 334 20 0 f0 s0 ceeeeee
+text 68 58 304 10 8 f1 s0 c000000 "Main text here, long enough to wrap in"
+text 78 58 80 10 8 f1 s0 c000000 "its column"
+rect 68 8 50 20 0 f0 s0 ceeeeee
+text 68 8 32 10 8 f1 s0 c000000 "Side"
+rect 88 8 384 10 0 f0 s0 ceeeeee
+text 88 8 32 10 8 f1 s0 c000000 "Foot"
+text 98 8 8 10 8 f1 s0 c000000 "1"
+text 98 72 8 10 8 f1 s0 c000000 "2"
+text 98 136 8 10 8 f1 s0 c000000 "3"
+text 98 200 8 10 8 f1 s0 c000000 "4"
+text 98 264 8 10 8 f1 s0 c000000 "5"
+text 108 8 32 10 8 f1 s0 c000000 "tall"
+text 118 8 72 10 8 f1 s0 c000000 "two lines"
+text 113 212 48 10 8 f1 s0 c000000 "middle"
+text 128 200 104 10 8 f1 s0 c000000 "placed second"
+text 128 8 96 10 8 f1 s0 c000000 "placed first"
+text 138 8 40 10 8 f1 s0 c000000 "after"
+

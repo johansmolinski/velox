@@ -36,7 +36,7 @@ se_Env		rs.l	1		; ... of what was defined before it
 se_Url		rs.l	1		; (after the block)
 SE_SIZEOF	rs.b	0		; the block follows
 
-SH_MAGIC	equ	'VXS1'		; (the block's format: also in the
+SH_MAGIC	equ	'VXS2'		; (the block's format: also in the
 					;  disk cache's key, ShKey)
 	RSRESET				; a block
 sh_Magic	rs.l	1
@@ -200,7 +200,7 @@ DiskFind:
 	rts
 
 ; ShKey - the disk cache's key for URL a0, text hash d2, env d3, into
-; a1: "URL|css1|TEXT|ENV" (the block's format in it)
+; a1: "URL|css2|TEXT|ENV" (the block's format in it)
 ShKey:	move.l	#URL_MAX-1,d1
 .c:	move.b	(a0)+,(a1)+
 	dbeq	d1,.c
@@ -228,7 +228,7 @@ Hex8:	moveq	#8-1,d1
 	dbf	d1,.l
 	rts
 HexD:		dc.b	"0123456789abcdef"
-ShKeyMid:	dc.b	"|css1|",0
+ShKeyMid:	dc.b	"|css2|",0
 	even
 
 ;--------------------------------------------------------------------

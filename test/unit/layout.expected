@@ -300,3 +300,28 @@ marq 30 8 384 12 9 f1 s0 c000000
 marq 42 8 200 12 9 f1 s0 c000000
 text 64 8 40 10 8 f1 s0 c000000 "After"
 
+# ::before and ::after: strings (escapes decoded; icon fonts' private use
+# code points left out), attr(), quotes, several tokens; their own style
+# (colour); display: none, empty content: no box
+layout test/unit/layout/pseudo.html 400 => 
+height 130
+text 10 28 32 10 8 f1 s0 c000000 "Home"
+text 10 68 8 10 8 f1 s0 c000000 "|"
+text 10 84 32 10 8 f1 s0 c000000 "News"
+text 10 124 8 10 8 f1 s0 c000000 "|"
+text 10 140 40 10 8 f1 s0 c000000 "About"
+text 30 8 32 10 8 f1 s0 c000000 "Name"
+text 30 40 8 10 8 f1 s0 cff0000 "*"
+text 30 56 8 10 8 f1 s0 c000000 """
+text 30 64 48 10 8 f1 s0 c000000 "quoted"
+text 30 112 8 10 8 f1 s0 c000000 """
+text 30 128 32 10 8 f1 s1 c0000ee L "link"
+text 30 168 8 10 8 f1 s1 c0000ee L "["
+text 30 176 48 10 8 f1 s1 c0000ee L "x.html"
+text 30 224 8 10 8 f1 s1 c0000ee L "]"
+text 50 8 8 10 8 f1 s0 c000000 "\xbb"
+text 50 24 32 10 8 f1 s0 c000000 "next"
+text 70 8 32 10 8 f1 s0 c000000 "icon"
+text 90 8 8 10 8 f1 s0 c000000 "c"
+text 110 8 8 10 8 f1 s0 c000000 "h"
+

@@ -321,6 +321,8 @@ st_GridC	rs.l	1		; an item's column, row: start.w (a
 st_GridR	rs.l	1		; line, 0 auto), end.w (a line, 0 auto,
 					; GSPAN + n span n)
 st_GridN	rs.l	1		; ... grid-area: its name (text) or 0
+st_Content	rs.l	1		; content: the value's text, or 0 (not
+					; inherited; ::before, ::after)
 STYLE_SIZEOF	rs.b	0
 GSPAN		equ	$4000
 SK_GEN		equ	0		; n_Style (style.s): g_StyleGen,
@@ -373,6 +375,7 @@ cs_MqMax	rs.w	1
 cs_Base		rs.l	1		; URL its sheet came from, 0: the page
 cs_Anc		rs.l	2		; what the element's ancestors must have
 					; (descendant / child compounds: n_Anc bits)
+cs_Pseudo	rs.l	1		; 1 ::before, 2 ::after, 0 the element
 CS_SIZEOF	rs.b	0
 
 VAR_BUCKETS	equ	256		; custom properties (css.s g_CssVars)
@@ -723,6 +726,8 @@ g_MarkerNum	rs.l	1
 g_ListNum	rs.l	1		; counter of the innermost list
 g_LayDepth	rs.l	1
 g_FlexDepth	rs.l	1		; flex.s: flex containers we are in
+g_CssPseudo	rs.l	1		; css.s: the rules being added are for
+					; ::before (1), ::after (2)
 g_GridDepth	rs.l	1		; grid.s: grid containers we are in
 g_MeasMin	rs.l	1		; table measuring
 g_MeasPref	rs.l	1

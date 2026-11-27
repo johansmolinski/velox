@@ -10,8 +10,11 @@
 ; Selectors: type, *, #id, .class, [attr], [attr=v] [~= ^= $= *= |=],
 ; :link, :any-link, :first-child, :last-child, :only-child, :empty,
 ; :root, :checked, :disabled, :selected (as attributes), :not(), :is(),
-; :where() (selector lists); combinators descendant, >, + and ~.  Rules
-; with anything else (:hover, ::before ...) are dropped.  @media is evaluated on min-/max-width against the window
+; :where() (selector lists); combinators descendant, >, + and ~;
+; ::before and ::after (or :before, :after) at a selector's end: the
+; rule is for that box (cs_Pseudo; PseudoApply, its content: content
+; as tokens, CanonContent).  Rules with anything else (:hover ...) are
+; dropped.  @media is evaluated on min-/max-width against the window
 ; width; @supports and @layer contents are used; other at-rules are
 ; skipped.
 ;
@@ -29,13 +32,14 @@
 	xref	TaskPoll,TaskNow
 
 	xdef	CssReset,CssAddSheet,CssApply,CssInvalidate,CssLoad,CssLoadFirst
-	xdef	InsertRule,VarInsert,RootElem
+	xdef	InsertRule,VarInsert,RootElem,PseudoApply,ContentText
 	IFD	PROFILE
 	xref	ProfRead
 	ENDC
 	xref	StyleStale
 	xref	PageAlloc,DomGetAttr,TagLookup,ToLower,ParseColor,ParseLength
 	xref	StrIPrefix,StrIFind,ParseDec,HttpGetCached,UrlResolve,DecodeCharset
+	xref	OutCodepoint
 	xref	BgFind
 	xref	BufFree,GuiStatus,LogEvent,CacheHas,DcHash
 	xref	SheetFind,SheetLoad,SheetSave,SheetEnv
@@ -135,6 +139,7 @@ CP_GROW_	rs.b	1		; grid-row, -start, -end
 CP_GROWS	rs.b	1
 CP_GROWE	rs.b	1
 CP_GAREA	rs.b	1		; grid-area
+CP_CONTENT	rs.b	1		; content (::before, ::after)
 CP_COUNT	rs.b	0
 
 	section	code,code
@@ -1227,12 +1232,18 @@ ParseDecls:
 	bhs.s	.skip
 	move.b	d2,(a3)+
 	move.b	d4,(a3)+
+	move.l	a3,-(sp)		; (the value's start)
 	move.l	a2,a0
 .cp:	cmp.l	a1,a0
 	bhs.s	.cpe
 	move.b	(a0)+,(a3)+
 	bra.s	.cp
 .cpe:	clr.b	(a3)+
+	move.l	(sp)+,a0
+	cmp.b	#CP_CONTENT,d2		; content: its tokens (in place)
+	bne.s	.skip
+	bsr	CanonContent
+	lea	1(a0),a3
 .skip:	move.l	d3,a2
 	tst.b	(a2)
 	beq	.end
@@ -1831,6 +1842,7 @@ PropNames:
 	PN	CP_GROWS,"grid-row-start"
 	PN	CP_GROWE,"grid-row-end"
 	PN	CP_GAREA,"grid-area"
+	PN	CP_CONTENT,"content"
 	PN	CP_COLGAP,"grid-column-gap"
 	PN	CP_ROWGAP,"grid-row-gap"
 	dc.b	0
@@ -1875,8 +1887,10 @@ ParseSelectorList:
 .c:	subq.w	#1,d1
 	bra.s	.fn
 .fe:	move.l	a0,d3			; d3 = end of this selector
+	move.l	a2,a0			; (::before, ::after at its end: the
+	move.l	d3,a1			;  rule is for that, its selector
+	bsr	PseudoEnd		;  the rest; a1 = the end then)
 	move.l	a2,a0
-	move.l	d3,a1
 	bsr	ParseSelector		; d0 = compound, d1 = specificity
 	tst.l	d0
 	beq.s	.next
@@ -2436,6 +2450,7 @@ AddRule:
 	move.l	d2,cs_Spec(a2)
 	move.w	g_CssMqMin(a4),cs_MqMin(a2)
 	move.w	g_CssMqMax(a4),cs_MqMax(a2)
+	move.l	g_CssPseudo(a4),cs_Pseudo(a2)	; (::before, ::after)
 	move.l	a3,a0			; what its ancestors must have
 	bsr	RuleAnc
 	movem.l	d0-d1,cs_Anc(a2)
@@ -2729,6 +2744,8 @@ CssApply:
 	lea	8(a2),a0
 	bra.s	.re
 .rl:	move.l	(a0)+,a1
+	tst.l	cs_Pseudo(a1)		; (::before, ::after: not its own)
+	bne.s	.re
 	move.l	a0,-(sp)
 	move.l	cs_Base(a1),g_CssBase(a4)	; (for url())
 	move.l	cs_Decls(a1),a0
@@ -2760,6 +2777,349 @@ CssApply:
 .x:	PROFE	19
 	movem.l	(sp)+,d2-d3/a2-a3/a5
 	rts
+
+;--------------------------------------------------------------------
+; PseudoApply - the style of element a0's ::before (d0 = 1) or ::after
+; (2), if rules make one: in a1 its parent's style (the element's)
+; comes, inherited, then its rules
+; Out: d0 = its content (the value's text; ContentText), or 0 if it has
+;      none (no rules, display: none) (CCR set)
+;--------------------------------------------------------------------
+PseudoApply:
+	movem.l	d2-d4/a2-a3/a5,-(sp)
+	move.l	a0,a5
+	move.l	a1,a3
+	move.l	d0,d4
+	move.l	n_Css(a5),d0		; rules for it?
+	beq	.no
+	move.l	d0,a2
+	move.w	2(a2),d0
+	move.l	d4,d1
+	subq.l	#1,d1
+	btst	d1,d0
+	beq	.no
+	clr.b	st_Display(a3)		; a new box: what is not inherited
+	moveq	#-1,d0
+	move.l	d0,st_Bg(a3)
+	move.l	d0,st_Edge(a3)
+	move.l	d0,st_Shadow(a3)
+	clr.l	st_Pad(a3)
+	clr.l	st_BgImg(a3)
+	clr.l	st_MTop(a3)
+	clr.l	st_MLeft(a3)
+	clr.l	st_Width(a3)
+	clr.l	st_FlexF(a3)
+	clr.l	st_FlexF+4(a3)
+	clr.l	st_MaxW(a3)
+	clr.l	st_BW(a3)
+	clr.l	st_Content(a3)
+	and.b	#(~(SF_MAUTO|SF_FLOATL|SF_FLOATR|SF_MAUTOL|SF_MAUTOR|SF_TFIXED|SF_IBLK))&$ff,st_Flags(a3)
+	clr.l	g_CssHidden(a4)		; (as CssApply: its box)
+	lea	g_CssBox(a4),a0
+	moveq	#16-1,d0
+.cb:	move.l	#-1,(a0)+
+	dbf	d0,.cb
+	moveq	#0,d2			; pass 0: normal, 1: important
+.pass:	move.w	(a2),d3
+	lea	8(a2),a0
+	bra.s	.re
+.rl:	move.l	(a0)+,a1
+	cmp.l	cs_Pseudo(a1),d4	; (its rules only)
+	bne.s	.re
+	move.l	a0,-(sp)
+	move.l	cs_Base(a1),g_CssBase(a4)
+	move.l	cs_Decls(a1),a0
+	move.l	d2,d0
+	move.l	a3,a1
+	bsr	ApplyDecls
+	move.l	(sp)+,a0
+.re:	dbf	d3,.rl
+	addq.l	#1,d2
+	cmp.l	#2,d2
+	blo.s	.pass
+	bsr	FinishBox
+	cmp.b	#DISP_NONE,st_Display(a3)
+	beq.s	.no
+	move.l	st_Content(a3),d0
+	bra.s	.x
+.no:	moveq	#0,d0
+.x:	movem.l	(sp)+,d2-d4/a2-a3/a5
+	rts
+
+; CanonContent - (ParseDecls) content value a0 (NUL ended) as tokens,
+; in place (never longer): a string "..." (its escapes decoded; code
+; points of the private use area, icon fonts', left out) as $01 text
+; $1E, attr(name) as $02 name $1E, open-quote and close-quote as a
+; string '"'; the rest (counter(), url() ...) left out; none, normal
+; as they are
+; Out: a0 = its NUL
+CanonContent:
+	movem.l	d2-d3/a2-a3,-(sp)
+	move.l	a0,a2			; a2 = read, a3 = write
+	move.l	a0,a3
+	bsr	SkipWs
+	lea	KwNone(pc),a1
+	bsr	Kw
+	bne	.keep
+	lea	KwNormal(pc),a1
+	bsr	Kw
+	bne	.keep
+.t:	move.l	a2,a0			; the next token
+	bsr	SkipWs
+	move.l	a0,a2
+	move.b	(a2),d0
+	beq	.end
+	cmp.b	#'"',d0
+	beq.s	.str
+	cmp.b	#39,d0
+	beq.s	.str
+	move.l	a2,a0
+	lea	KwOpenQ(pc),a1
+	bsr	Kw
+	bne.s	.q
+	lea	KwCloseQ(pc),a1
+	bsr	Kw
+	bne.s	.q
+	lea	KwAttr(pc),a1
+	jsr	StrIPrefix
+	bne.s	.attr
+.sk:	moveq	#0,d1			; else: passed over (parentheses too)
+.sl:	move.b	(a2),d0
+	beq	.end
+	cmp.b	#'(',d0
+	bne.s	.sc
+	addq.l	#1,d1
+.sc:	cmp.b	#')',d0
+	bne.s	.sb
+	subq.l	#1,d1
+.sb:	addq.l	#1,a2
+	tst.l	d1
+	bgt.s	.sl
+	cmp.b	#' ',(a2)
+	bhi.s	.sl
+	bra.s	.t
+.q:	lea	10(a2),a2		; (open-quote: 10, close-quote: 11)
+	cmp.b	#' ',(a2)
+	bls.s	.q1
+	addq.l	#1,a2
+.q1:	move.b	#1,(a3)+
+	move.b	#'"',(a3)+
+	move.b	#$1e,(a3)+
+	bra.s	.t
+.attr:	move.l	a0,a2			; attr(name): $02 name $1E
+	move.b	#2,(a3)+
+.an:	move.b	(a2)+,d0
+	beq.s	.ae
+	cmp.b	#')',d0
+	beq.s	.ae
+	cmp.b	#' ',d0
+	bls.s	.an
+	or.b	#$20,d0
+	move.b	d0,(a3)+
+	bra.s	.an
+.ae:	move.b	#$1e,(a3)+
+	tst.b	-1(a2)
+	bne	.t
+	subq.l	#1,a2			; (the NUL again)
+	bra	.t
+.str:	move.b	d0,d2			; d2 = the quote
+	addq.l	#1,a2
+	move.b	#1,(a3)+
+.s:	move.b	(a2)+,d0
+	beq.s	.se0
+	cmp.b	d2,d0
+	beq.s	.se
+	cmp.b	#92,d0			; '\': an escape
+	beq.s	.esc
+	move.b	d0,(a3)+
+	bra.s	.s
+.esc:	moveq	#0,d3			; hex digits: a code point (one blank
+	moveq	#0,d1			;  after them dropped)
+.h:	move.b	(a2),d0
+	bsr	HexVal
+	bmi.s	.he
+	lsl.l	#4,d3
+	or.b	d0,d3
+	addq.l	#1,a2
+	addq.l	#1,d1
+	cmp.l	#6,d1
+	blo.s	.h
+.he:	tst.l	d1
+	beq.s	.lit
+	cmp.b	#' ',(a2)
+	bne.s	.cp
+	addq.l	#1,a2
+.cp:	cmp.l	#$e000,d3		; (private use: left out)
+	blo.s	.out
+	cmp.l	#$f8ff,d3
+	bls.s	.s
+.out:	move.l	d3,d0
+	move.l	a3,a1
+	jsr	OutCodepoint
+	move.l	a1,a3
+	bra.s	.s
+.lit:	move.b	(a2)+,d0		; '\' and a character: it
+	beq.s	.se0
+	move.b	d0,(a3)+
+	bra.s	.s
+.se0:	subq.l	#1,a2			; (the NUL again)
+.se:	move.b	#$1e,(a3)+
+	bra	.t
+.keep:	move.l	a2,a3			; none, normal: to its NUL
+.k:	tst.b	(a3)+
+	bne.s	.k
+	subq.l	#1,a3
+	bra.s	.x
+.end:	clr.b	(a3)
+.x:	move.l	a3,a0
+	movem.l	(sp)+,d2-d3/a2-a3
+	rts
+
+; ContentText - the next token of content value a0 (CanonContent's)
+; for element a1: a string, or an attribute's value
+; Out: a0 = its text, d0 = its length (0: an empty one), a1 = the
+;      token after it, or 0 if none
+ContentText:
+	movem.l	a2-a3,-(sp)
+	move.l	a1,a3			; a3 = the element
+	move.b	(a0)+,d0
+	cmp.b	#1,d0
+	beq.s	.str
+	cmp.b	#2,d0
+	bne.s	.none
+	lea	g_CssTag(a4),a1		; attr(name): its value
+	moveq	#62,d1
+.an:	move.b	(a0)+,d0
+	beq.s	.none
+	cmp.b	#$1e,d0
+	beq.s	.ae
+	move.b	d0,(a1)+
+	dbf	d1,.an
+.ae:	clr.b	(a1)
+	move.l	a0,a2			; (the next)
+	move.l	a3,a0
+	lea	g_CssTag(a4),a1
+	jsr	DomGetAttr
+	move.l	d0,a0
+	moveq	#0,d0
+	move.l	a0,d1
+	beq.s	.nxt
+	moveq	#-1,d0
+.al:	addq.l	#1,d0
+	tst.b	(a0,d0.l)
+	bne.s	.al
+	bra.s	.nxt
+.str:	moveq	#0,d0			; to its $1E
+.sl:	move.b	(a0,d0.l),d1
+	beq.s	.none
+	cmp.b	#$1e,d1
+	beq.s	.sn
+	addq.l	#1,d0
+	bra.s	.sl
+.sn:	lea	1(a0,d0.l),a2
+.nxt:	move.l	a2,a1			; the next token: if there is one
+	tst.b	(a1)
+	bne.s	.x
+	sub.l	a1,a1
+	bra.s	.x
+.none:	sub.l	a1,a1
+	moveq	#0,d0
+.x:	movem.l	(sp)+,a2-a3
+	rts
+
+; HexVal - d0.b a hex digit?  Out: d0 = its value, or -1 (CCR set)
+; (d1 kept)
+HexVal:	and.l	#$ff,d0
+	sub.b	#'0',d0
+	cmp.b	#9,d0
+	bls.s	.y
+	or.b	#$20,d0
+	sub.b	#'a'-'0',d0
+	cmp.b	#5,d0
+	bhi.s	.no
+	add.b	#10,d0
+.y:	tst.l	d0
+	rts
+.no:	moveq	#-1,d0
+	rts
+
+; PContent - content: the value's tokens (CanonContent; none, normal: 0)
+PContent:
+	move.l	a2,a0			; (its tokens: CanonContent; no blanks
+	clr.l	st_Content(a3)		;  before them)
+	lea	KwNone(pc),a1
+	bsr	Kw
+	bne.s	.x
+	lea	KwNormal(pc),a1
+	bsr	Kw
+	bne.s	.x
+	move.l	a0,st_Content(a3)
+.x:	rts
+
+; PseudoEnd - (ParseSelectorList) selector a0 .. a1: ::before, ::after
+; (or :before, :after) at its end?  g_CssPseudo = 1, 2 (a1 before it
+; then) or 0
+PseudoEnd:
+	clr.l	g_CssPseudo(a4)
+.t:	cmp.l	a0,a1			; (blanks at its end)
+	bls.s	.x
+	cmp.b	#' ',-1(a1)
+	bhi.s	.w
+	subq.l	#1,a1
+	bra.s	.t
+.w:	movem.l	a0-a1,-(sp)		; ":before"?
+	lea	SBefore(pc),a0
+	bsr.s	.suf
+	beq.s	.na
+	moveq	#1,d0
+	bra.s	.got
+.na:	lea	SAfter(pc),a0
+	bsr.s	.suf
+	beq.s	.nn
+	moveq	#2,d0
+	bra.s	.got
+.nn:	movem.l	(sp)+,a0-a1
+.x:	rts
+.got:	move.l	d0,g_CssPseudo(a4)
+	movem.l	(sp)+,a0		; (a1: before it, one or two ':')
+	addq.l	#4,sp
+	cmp.l	a0,a1
+	bls.s	.r
+	cmp.b	#':',-1(a1)
+	bne.s	.r
+	subq.l	#1,a1
+.r:	rts
+; .suf - does the text before 4(sp) end with ":" + word a0 (lower
+; case)?  Out: Z clear if so, a1 = its ':' then
+.suf:	move.l	8(sp),a1		; (its end)
+	move.l	a0,-(sp)
+.e:	tst.b	(a0)+
+	bne.s	.e
+	subq.l	#1,a0
+	move.l	(sp)+,d1		; d1 = the word's start
+.c:	cmp.l	d1,a0
+	beq.s	.colon
+	cmp.l	4(sp),a1		; (the selector's start: no)
+	bls.s	.no
+	move.b	-(a1),d0
+	or.b	#$20,d0
+	cmp.b	-(a0),d0
+	beq.s	.c
+.no:	moveq	#0,d0
+	rts
+.colon:	cmp.l	4(sp),a1
+	bls.s	.no
+	cmp.b	#':',-(a1)
+	bne.s	.no
+	moveq	#1,d1
+	rts
+
+SBefore:	dc.b	"before",0
+SAfter:		dc.b	"after",0
+KwOpenQ:	dc.b	"open-quote",0
+KwCloseQ:	dc.b	"close-quote",0
+KwAttr:		dc.b	"attr(",0
+	even
 
 ; FinishBox - margins, paddings and borders set by CSS into the style
 ; (a3): each side becomes margin (or the UA margin) + padding + border
@@ -2814,8 +3174,9 @@ SideOffs:	dc.w	st_MTop,st_MRight,st_MBottom,st_MLeft
 ;--------------------------------------------------------------------
 ; CssMatch - find the rules for an element
 ; In:  a0 = element
-; Out: d0 = MatchList (page pool): count.w, pad.w, inline decls.l,
-;      rule pointers in cascade order
+; Out: d0 = MatchList (page pool): count.w, pseudo.w (bit 0: rules for
+;      its ::before, 1: ::after), inline decls.l, rule pointers in
+;      cascade order
 ;--------------------------------------------------------------------
 CssMatch:
 	movem.l	d2-d5/a2-a3/a5,-(sp)
@@ -2943,9 +3304,16 @@ CssMatch:
 	move.l	d4,4(a0)
 	lea	8(a0),a1
 	lea	g_CssMatch(a4),a2
+	moveq	#0,d1			; (pseudo.w: 1 ::before, 2 ::after rules)
 	bra.s	.ce
-.c:	move.l	(a2)+,(a1)+
+.c:	move.l	(a2)+,a3
+	move.l	a3,(a1)+
+	move.l	cs_Pseudo(a3),d3
+	beq.s	.ce
+	bset	d3,d1
 .ce:	dbf	d2,.c
+	lsr.w	#1,d1
+	move.w	d1,2(a0)
 	bra.s	.x
 .empty:	lea	NoMatches(pc),a0	; shared empty list
 	move.l	a0,d0
@@ -3416,7 +3784,7 @@ PropJump:
 	dc.w	PGridCols-PropJump,PGridAreas-PropJump,PGridTempl-PropJump
 	dc.w	PGridLine-PropJump,PGridLine-PropJump,PGridLine-PropJump
 	dc.w	PGridLine-PropJump,PGridLine-PropJump,PGridLine-PropJump
-	dc.w	PGridArea-PropJump
+	dc.w	PGridArea-PropJump,PContent-PropJump
 	IFNE	(*-PropJump)-2*CP_COUNT
 	FAIL	"PropJump: one entry per CP_xxx"
 	ENDC

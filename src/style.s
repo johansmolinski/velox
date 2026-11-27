@@ -163,6 +163,7 @@ StyleCompute:
 	clr.l	st_GridC(a3)
 	clr.l	st_GridR(a3)
 	clr.l	st_GridN(a3)
+	clr.l	st_Content(a3)
 	and.b	#(~(SF_MAUTO|SF_FLOATL|SF_FLOATR|SF_MAUTOL|SF_MAUTOR|SF_TFIXED|SF_IBLK))&$ff,st_Flags(a3)
 
 	; user agent defaults

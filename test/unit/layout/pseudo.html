@@ -1,0 +1,14 @@
+<html><head><style>
+.menu li { display: inline } .menu li + li::before { content: " | " }
+.req::after { content: "*"; color: red }
+q::before { content: open-quote } q::after { content: close-quote }
+a.ext::after { content: " [" attr(href) "]" }
+.arrow::before { content: "\00bb  " }
+.icon::before { content: "\f101"; font-family: FontAwesome }
+.clearfix::after { content: ""; display: table; clear: both }
+.hidden::before { content: "no"; display: none }
+</style></head><body>
+<ul class="menu"><li>Home</li><li>News</li><li>About</li></ul>
+<p><label class="req">Name</label> <q>quoted</q> <a class="ext" href="x.html">link</a></p>
+<p class="arrow">next</p><p class="icon">icon</p><div class="clearfix">c</div><p class="hidden">h</p>
+</body></html>

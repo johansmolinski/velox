@@ -33,7 +33,7 @@
 	xref	DomGetAttr,ParseDec,LayoutTable,CssApply,CssTableMode
 	xref	IsAtomic,InlineBlock
 	xref	FormIsControl,FormControlSize,CssInvalidate,TaskPoll,BufFree,LogEvent
-	xref	ViewSelect,LayoutFlex,LayoutGrid
+	xref	ViewSelect,LayoutFlex,LayoutGrid,PseudoApply,ContentText
 
 	IFNE	RUN_SIZEOF-32
 	FAIL	"RunCount/RunPtr assume RUN_SIZEOF = 32"
@@ -200,9 +200,12 @@ LayPoll:
 ; In: a0 = node, a1 = the node's style
 ;--------------------------------------------------------------------
 LayoutChildren:
-	movem.l	a2-a3,-(sp)
+	movem.l	a2-a3/a5,-(sp)
+	move.l	a0,a5
 	move.l	a1,a3
-	move.l	n_First(a0),a2
+	moveq	#1,d0			; its ::before
+	bsr	LayPseudo
+	move.l	n_First(a5),a2
 .l:	move.l	a2,d0
 	beq.s	.x
 	move.l	a2,a0
@@ -210,8 +213,47 @@ LayoutChildren:
 	bsr.s	LayoutNode
 	move.l	n_Next(a2),a2
 	bra.s	.l
-.x:	movem.l	(sp)+,a2-a3
+.x:	moveq	#2,d0			; its ::after
+	bsr	LayPseudo
+	movem.l	(sp)+,a2-a3/a5
 	rts
+
+; LayPseudo - (LayoutChildren) element a5's ::before (d0 = 1) or
+; ::after (2), if it has one with content: its text, in its style
+; (inherited from a3, the element's)
+LayPseudo:
+	cmp.b	#DN_ELEMENT,n_Type(a5)
+	bne.s	.x
+	tst.l	n_Css(a5)		; (rules for one: CssMatch knows)
+	beq.s	.x
+	move.l	d2,-(sp)
+	move.l	d0,d2
+	lea	-STYLE_SIZEOF(sp),sp
+	move.l	a3,a0			; its style: the element's, then its
+	move.l	sp,a1			; rules
+	moveq	#STYLE_SIZEOF/4-1,d0
+.c:	move.l	(a0)+,(a1)+
+	dbf	d0,.c
+	move.l	a5,a0
+	move.l	sp,a1
+	move.l	d2,d0
+	jsr	PseudoApply
+	beq.s	.n
+	move.l	d0,a0			; its text: each token
+.t:	move.l	a5,a1
+	jsr	ContentText		; a0/d0 = it, a1 = the next
+	move.l	a1,-(sp)
+	tst.l	d0
+	beq.s	.e
+	lea	4(sp),a1
+	bsr	LayoutChars
+.e:	move.l	(sp)+,d0
+	beq.s	.n
+	move.l	d0,a0
+	bra.s	.t
+.n:	lea	STYLE_SIZEOF(sp),sp
+	movem.l	(sp)+,d2
+.x:	rts
 
 ;--------------------------------------------------------------------
 ; LayoutNode - lay out one node

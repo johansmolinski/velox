@@ -959,6 +959,8 @@ PfNode:
 	FIX	SK_STYLE+st_GridT,a3
 	FIX	SK_STYLE+st_GridA,a3
 	FIX	SK_STYLE+st_GridN,a3
+	FIX	SK_PARENT+st_Content,a3	; (content: its value's text)
+	FIX	SK_STYLE+st_Content,a3
 .ns:	move.l	n_Data2(a2),d0		; aux: an image (not saved) or form
 	beq.s	.at			; state
 	lea	n_Data2(a2),a0

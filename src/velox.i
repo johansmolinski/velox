@@ -366,6 +366,16 @@ cs_Anc		rs.l	2		; what the element's ancestors must have
 					; (descendant / child compounds: n_Anc bits)
 CS_SIZEOF	rs.b	0
 
+VAR_BUCKETS	equ	256		; custom properties (css.s g_CssVars)
+	RSRESET
+ve_Next		rs.l	1		; a custom property: the next in its bucket
+ve_Name		rs.l	1		; its name (in the sheet)
+ve_NameLen	rs.l	1
+ve_Val		rs.l	1		; its value, as written: start
+ve_ValEnd	rs.l	1		; ... end
+ve_Sheet	rs.l	1		; the sheet that defined it (g_CssSheetNo)
+VE_SIZEOF	rs.b	0
+
 CSS_IDBUCKETS	equ	64
 CSS_CLBUCKETS	equ	128
 CSS_MAXMATCH	equ	64		; matched rules kept per element
@@ -732,6 +742,7 @@ g_RunRep	rs.l	1		; ... repeated
 g_CssBase	rs.l	1		; URL of the sheet being used, or 0
 g_CssVars	rs.l	1		; css.s: custom properties of the root
 					; (hash buckets) while sheets are parsed
+g_CssSheetNo	rs.l	1		; css.s: the sheet being parsed (ve_Sheet)
 g_StyleGen	rs.l	1		; style.s: changes when kept styles are stale
 g_RespFrom	rs.l	1		; cache.s: g_Resp came from 0 the network,
 					; 1 memory, 2 the disk cache as it was
@@ -803,6 +814,8 @@ g_KeyChars	rs.b	8
 g_CssHidden	rs.l	1		; "visually hidden" detection bits:
 					; 0 positioned, 1 off screen/clipped,
 					; 2 width <= 1, 3 height <= 1
+g_ShHead	rs.l	1		; sheetcache.s: kept sheets (latest first)
+g_ShBytes	rs.l	1		; ... their bytes
 g_CssBox	rs.l	16		; CSS margins, paddings, border widths,
 					; border styles (1 shown, 0 none) (each
 					; t r b l), -1 unset

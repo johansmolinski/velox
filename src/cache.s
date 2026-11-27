@@ -11,7 +11,7 @@
 	include	"velox.i"
 
 	xdef	CacheInit,CacheStore,HttpGetCached,CacheFlush,CacheHas
-	xref	DcLoad,DcFresh,DcCond,DcPeek
+	xref	DcLoad,DcFresh,DcCond,DcPeek,SheetFlush
 	xref	DcTouch
 	xref	Alloc,Free,HttpGet,StrLen,StrCopyN,BufFree,BufReserve,LogEvent
 
@@ -279,4 +279,4 @@ CacheFlush:
 	move.l	d0,a0
 	bsr	Remove
 	bra.s	.l
-.x:	rts
+.x:	jmp	SheetFlush		; (the style sheets kept parsed too)

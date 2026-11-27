@@ -2789,6 +2789,8 @@ PaintBlank:
 	jsr	ViewSelect
 	tst.l	g_TabHidden(a4)		; (a tab in the background: not shown)
 	bne	HidX
+	clr.l	g_BandsOk(a4)		; (what was painted is gone: the next
+					;  page all painted, the same or not)
 	movem.l	d2-d3/a2-a3,-(sp)
 	move.l	g_Window(a4),d0
 	beq.s	.x

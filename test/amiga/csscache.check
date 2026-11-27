@@ -1,0 +1,14 @@
+#!/bin/sh
+# checks for csscache.script: the second load used the kept sheet, the
+# page as high and its area the same (a 1x1 difference: none)
+d=$(dirname "$1"); fail=0
+sed 's/^/driver: /' "$d/csscache.driver"
+grep -q '^kept: 1$' "$d/csscache.driver" || { echo "the sheet was not kept"; fail=1; }
+h=$(sed -n 's/^heights: //p' "$d/csscache.driver")
+set -- $h
+[ "$#" = 2 ] && [ "$1" = "$2" ] || { echo "heights differ: $h"; fail=1; }
+dh=$(sed -n 's/^difference: [0-9]*x//p' "$d/csscache.driver")
+[ -n "$dh" ] && [ "$dh" -le 1 ] || { echo "the page looks different"; fail=1; }
+grep -q '^ok$' "$d/csscache.driver" || fail=1
+grep -q '^exit rc=0' "$d/csscache.txt" || { echo "velox exit code"; fail=1; }
+exit $fail

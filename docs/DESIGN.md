@@ -485,6 +485,7 @@ JS is not on the roadmap yet, but it must stay possible to add. That means:
 | edit.s      | editing a field or text area: soft-wrapped lines, moves, selection, undo |
 | flex.s      | flexbox: items in rows (measured as table cells) or columns       |
 | iblock.s    | inline-blocks (and floats other than images): one box on a line  |
+| sheetcache.s | linked style sheets kept parsed (rules, custom properties) for the next pages |
 | visits.s    | the pages visited (ENVARC:Velox/Visited), matching a text typed   |
 | drop.s      | the list under the address field: filtered as typed, in a window of its own |
 | img.s       | loading images (also backgrounds), the decoder process, datatypes |

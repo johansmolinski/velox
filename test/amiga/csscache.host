@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Host side of csscache.script: the page, then another page the same
+(its style sheet kept parsed: "sheetkept"); both look the same."""
+import os
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from xdrive import Amiga, wait_log  # noqa: E402
+
+r = sys.argv[1]
+log = os.path.join(r, "csscache.log")
+out = open(os.path.join(r, "csscache.driver"), "w")
+U = "http://127.0.0.1:8080/csscache.html"
+U2 = "http://127.0.0.1:8080/csscache2.html"     # (the same: another URL)
+
+
+def step(m):
+    out.write(m + "\n")
+    out.flush()
+
+
+try:
+    a = Amiga()
+    wait_log(log, "page " + U, timeout=120)
+    time.sleep(2)
+    a.shot(os.path.join(r, "csscache-1.png"))
+    a.key("ctrl+l"); a.key("amiga+x")
+    a.type(U2)
+    a.key("Return")
+    wait_log(log, "page " + U2, timeout=120)
+    lines = open(log, encoding="latin-1").read().split("\n")
+    time.sleep(2)
+    a.shot(os.path.join(r, "csscache-2.png"))
+    a.key("Escape")
+    time.sleep(2)
+    a.shot(os.path.join(r, "csscache-3.png"))
+    pages = [l for l in lines if l.startswith("page ")]
+    step("heights: %s" % " ".join(l.split()[2] for l in pages))
+    kept = [l for l in lines if l.startswith("sheetkept ")]
+    step("kept: %d" % len(kept))
+    # (the page area only: the address differs)
+    res = subprocess.run(
+        ["convert", os.path.join(r, "csscache-1.png"),
+         os.path.join(r, "csscache-2.png"), "-crop", "680x420+130+108",
+         "+repage", "-compose", "difference",
+         "-composite", "-threshold", "0", "-trim", "-format", "%w %h",
+         "info:"], capture_output=True, text=True)
+    w, h = [int(v) for v in res.stdout.split()[:2]]
+    step("difference: %dx%d" % (w, h))
+    a.key("ctrl+q")
+    step("ok")
+except Exception as e:
+    step("FAIL %r" % e)
+    try:
+        Amiga().key("ctrl+q")
+    except Exception:
+        pass

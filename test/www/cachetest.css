@@ -1,0 +1,16 @@
+/* csscache test: what a kept (parsed before) sheet must bring back */
+:root { --main: #cc0000; --gap: 40px; --edge: 3px solid #0000cc }
+html[lang="en"] .x { color: var(--main) }
+#box, .alt { margin-left: var(--gap); border: var(--edge); padding: 4px }
+ul > li:first-child { font-weight: bold }
+p:not(.skip) + p { margin-top: 30px }
+a[href^="http"] { background: #eeeeee; padding: 2px }
+:is(h1, h2) span { color: #008800 }
+.imp { color: #000000 !important }
+.x.imp { color: #ff00ff }
+@media (max-width: 300px) { .wide { display: none } }
+@media (min-width: 301px) { .narrow { display: none } }
+.flex { display: flex; gap: 8px }
+.flex div { flex: 1; background: #ddeeff; border-right: 4px solid #333333 }
+.t { display: table; width: 100% }
+.t > span { display: table-cell; padding: 2px 6px }

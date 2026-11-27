@@ -29,6 +29,7 @@
 	xref	TaskPoll,TaskNow
 
 	xdef	CssReset,CssAddSheet,CssApply,CssInvalidate,CssLoad,CssLoadFirst
+	xdef	InsertRule,VarInsert,RootElem
 	IFD	PROFILE
 	xref	ProfRead
 	ENDC
@@ -36,22 +37,15 @@
 	xref	PageAlloc,DomGetAttr,TagLookup,ToLower,ParseColor,ParseLength
 	xref	StrIPrefix,StrIFind,ParseDec,HttpGetCached,UrlResolve,DecodeCharset
 	xref	BgFind
-	xref	BufFree,GuiStatus,LogEvent,CacheHas
+	xref	BufFree,GuiStatus,LogEvent,CacheHas,DcHash
+	xref	SheetFind,SheetLoad,SheetSave,SheetEnv
 
 MAX_SHEETS	equ	8		; linked style sheets fetched per page
 MAX_SHEET	equ	512*1024
 DECL_TMP	equ	4096
 VAR_BUF		equ	2048		; (g_CssVarBuf)
-VAR_BUCKETS	equ	256
 VAR_DEPTH	equ	16		; var()s in var()s (and loops)
 CP_CUSTOM	equ	$100		; a custom property ("--name: ...")
-	RSRESET
-ve_Next		rs.l	1		; a custom property: the next in its bucket
-ve_Name		rs.l	1		; its name (in the sheet)
-ve_NameLen	rs.l	1
-ve_Val		rs.l	1		; its value, as written: start
-ve_ValEnd	rs.l	1		; ... end
-VE_SIZEOF	rs.b	0
 CSS_EM		equ	16		; CSS px of the normal font size
 CSS_NAMEBUF	equ	256
 
@@ -309,13 +303,42 @@ CssLoadMode:
 	cmp.l	#200,d0
 	bne.s	.fetched
 	move.l	g_Resp+r_Body+buf_Data(a4),d0
-	beq.s	.fetched
-	move.l	d0,a0
+	beq	.fetched
 	move.l	g_Resp+r_Body+buf_Len(a4),d0
 	cmp.l	#MAX_SHEET,d0
-	bhi.s	.fetched
+	bhi	.fetched
+	lea	g_LinkUrl(a4),a0	; its URL: url()s are relative to it
+	bsr	StrLenA0		; (and the kept sheet's)
+	addq.l	#1,d0
+	jsr	PageAlloc
+	move.l	d0,g_CssBase(a4)
+	beq	.fetched
+	move.l	d0,a1
+	lea	g_LinkUrl(a4),a0
+.cu:	move.b	(a0)+,(a1)+
+	bne.s	.cu
+	move.l	g_Resp+r_Body+buf_Data(a4),a0	; parsed before?  (its
+	move.l	g_Resp+r_Body+buf_Len(a4),d0	;  text, and what it
+	jsr	DcHash				;  depends on: SheetEnv)
+	move.l	d0,-(sp)		; 4(sp) = text hash, (sp) = env
+	jsr	SheetEnv
+	move.l	d0,-(sp)
+	move.l	g_CssBase(a4),a0
+	move.l	4(sp),d0
+	move.l	(sp),d1
+	jsr	SheetFind
+	beq.s	.parse
+	move.l	d0,a0			; yes: its rules as they were
+	jsr	SheetLoad
+	lea	LogSheetKept(pc),a0	; (for tests)
+	move.l	g_CssBase(a4),a1
+	move.l	#$80000000,d0
+	jsr	LogEvent
+	bra	.parsed
+.parse:	move.l	g_Resp+r_Body+buf_Data(a4),a0
+	move.l	g_Resp+r_Body+buf_Len(a4),d0
 	bsr	CopySheet
-	beq.s	.fetched
+	beq	.parsed
 	move.l	d0,a2
 	move.l	a2,a0			; to Latin-1
 	bsr	StrLenA0
@@ -323,18 +346,20 @@ CssLoadMode:
 	move.l	g_PageCharset(a4),-(sp)	; (keep the page's charset)
 	jsr	DecodeCharset
 	move.l	(sp)+,g_PageCharset(a4)
-	lea	g_LinkUrl(a4),a0	; url()s are relative to the sheet
-	bsr	StrLenA0
-	addq.l	#1,d0
-	jsr	PageAlloc
-	beq.s	.nb
-	move.l	d0,a1
-	lea	g_LinkUrl(a4),a0
-.cu:	move.b	(a0)+,(a1)+
-	bne.s	.cu
-.nb:	move.l	d0,g_CssBase(a4)
+	addq.l	#1,g_CssSheetNo(a4)	; (its custom properties: ve_Sheet)
+	move.l	g_CssRules(a4),-(sp)	; (its first rule)
 	move.l	a2,a0
 	bsr	CssAddSheet
+	move.l	d2,-(sp)		; kept for the next pages
+	move.l	4(sp),d2
+	move.l	g_CssBase(a4),a0
+	move.l	12(sp),d0
+	move.l	8(sp),d1
+	jsr	SheetSave
+	move.l	(sp)+,d2
+	addq.l	#4,sp
+.parsed:
+	addq.l	#8,sp
 	clr.l	g_CssBase(a4)
 	bsr	SheetTicks
 	lea	LogSheetParse(pc),a0
@@ -382,6 +407,7 @@ AnClass:	dc.b	"class",0
 SStylesheet:	dc.b	"stylesheet",0
 LogSheet:	dc.b	"sheet",0
 LogSheetGet:	dc.b	"sheetget",0
+LogSheetKept:	dc.b	"sheetkept",0
 LogSheetParse:	dc.b	"sheetparse",0
 SGFonts:	dc.b	"//fonts.googleapis.com/",0
 SBFonts:	dc.b	"//fonts.bunny.net/",0
@@ -1350,6 +1376,7 @@ VarDefine:
 	move.l	a3,ve_Name(a1)
 	move.l	a2,ve_Val(a1)
 	move.l	d2,ve_ValEnd(a1)
+	move.l	g_CssSheetNo(a4),ve_Sheet(a1)
 	move.l	a3,a0			; its name's length
 .n:	move.b	(a0),d0
 	cmp.b	#':',d0
@@ -1360,15 +1387,33 @@ VarDefine:
 	bra.s	.n
 .ne:	sub.l	a3,a0
 	move.l	a0,ve_NameLen(a1)
-	move.l	a0,d0
-	move.l	a3,a0
-	bsr	VarHash			; first in its bucket
+	move.l	a1,a0
+	bsr.s	VarLink
+.x:	movem.l	(sp)+,d2/a2-a3
+	rts
+
+; VarInsert - (sheetcache.s) custom property a0 (ve_xxx, all set but
+; ve_Next) into the table (made if there is none yet)
+VarInsert:
+	tst.l	g_CssVars(a4)
+	bne.s	VarLink
+	move.l	a0,-(sp)
+	move.l	#VAR_BUCKETS*4,d0
+	jsr	PageAlloc
+	move.l	d0,g_CssVars(a4)
+	movem.l	(sp)+,a0
+	beq.s	VarLx
+; VarLink - custom property a0 first in its bucket
+VarLink:
+	move.l	a0,a1
+	move.l	ve_Name(a1),a0
+	move.l	ve_NameLen(a1),d0
+	bsr	VarHash			; (a1 kept)
 	move.l	g_CssVars(a4),a0
 	lea	(a0,d0.l*4),a0
 	move.l	(a0),ve_Next(a1)
 	move.l	a1,(a0)
-.x:	movem.l	(sp)+,d2/a2-a3
-	rts
+VarLx:	rts
 
 ; VarHash - the bucket of name a0, d0 long  Out: d0 (a1 kept)
 VarHash:
@@ -2367,14 +2412,28 @@ AddRule:
 	move.l	a3,cs_Sel(a2)
 	move.l	d3,cs_Decls(a2)
 	move.l	d2,cs_Spec(a2)
-	move.l	g_CssRules(a4),cs_Order(a2)
-	addq.l	#1,g_CssRules(a4)
 	move.w	g_CssMqMin(a4),cs_MqMin(a2)
 	move.w	g_CssMqMax(a4),cs_MqMax(a2)
-	move.l	g_CssBase(a4),cs_Base(a2)
 	move.l	a3,a0			; what its ancestors must have
 	bsr	RuleAnc
 	movem.l	d0-d1,cs_Anc(a2)
+	move.l	a2,a0
+	bsr.s	InsertRule
+.x:	movem.l	(sp)+,d2-d3/a2-a3
+	rts
+
+;--------------------------------------------------------------------
+; InsertRule - rule a0 (cs_Sel, _Decls, _Spec, _MqMin/Max, _Anc set; a
+; new one, or from sheetcache.s) in the cascade: its order, its sheet
+; (g_CssBase), into its bucket
+;--------------------------------------------------------------------
+InsertRule:
+	movem.l	d2-d3/a2-a3,-(sp)
+	move.l	a0,a2
+	move.l	cs_Sel(a2),a3
+	move.l	g_CssRules(a4),cs_Order(a2)
+	addq.l	#1,g_CssRules(a4)
+	move.l	g_CssBase(a4),cs_Base(a2)
 	tst.w	cs_MqMin(a2)
 	bne.s	.mq
 	cmp.w	#$7fff,cs_MqMax(a2)

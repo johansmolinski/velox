@@ -14,7 +14,8 @@
 ; that tall; center and end move the item down.
 ; A column: the items one below the other as blocks; not stretched
 ; (align-items), they get their preferred width, placed as it says.
-; Not done: order, the -reverse directions, justify-content in a
+; Items in their order (order:), then as they come.
+; Not done: the -reverse directions, justify-content in a
 ; column, baselines.
 ;
 
@@ -49,6 +50,10 @@ fx_Right	rs.l	1
 fx_Gap		rs.l	1		; column-gap
 fx_Free		rs.l	1		; room left in the line
 fx_Next		rs.l	1		; the next child to look at
+fx_First	rs.l	1		; the first child
+fx_Ord		rs.l	1		; the order taken now (NextItem) ...
+fx_OrdNext	rs.l	1		; ... and the next larger one seen
+fx_SvOrd	rs.l	2		; (Gather: both, to go back)
 fx_IStyle	rs.b	STYLE_SIZEOF	; an item's style
 fx_SIZEOF	rs.b	0
 
@@ -75,6 +80,8 @@ LayoutFlex:
 	move.l	g_LayLeft(a4),fx_Left(a3)
 	move.l	g_LayRight(a4),fx_Right(a3)
 	move.l	n_First(a5),fx_Next(a3)
+	move.l	n_First(a5),fx_First(a3)
+	bsr	OrdFirst
 	move.l	fx_Style(a3),a0
 	moveq	#0,d0
 	move.b	st_Gap(a0),d0
@@ -107,15 +114,56 @@ LayoutFlex:
 	rts
 
 ;--------------------------------------------------------------------
+; OrdFirst - (LayoutFlex) the items are taken by their order: one pass
+; over the children for each order value, the smallest first (fx_Ord)
+;--------------------------------------------------------------------
+OrdFirst:
+	movem.l	d2/a2/a5,-(sp)
+	move.l	#$7fffffff,d2		; d2 = the smallest order
+	move.l	fx_First(a3),a5
+.l:	move.l	a5,d0
+	beq.s	.x
+	moveq	#0,d0			; (text: 0)
+	cmp.b	#DN_ELEMENT,n_Type(a5)
+	bne.s	.o
+	move.l	a5,a0
+	move.l	fx_Style(a3),a1
+	lea	fx_IStyle(a3),a2
+	jsr	StyleOf
+	move.b	fx_IStyle+st_Order(a3),d0
+	ext.w	d0
+	ext.l	d0
+.o:	cmp.l	d2,d0
+	bge.s	.n
+	move.l	d0,d2
+.n:	move.l	n_Next(a5),a5
+	bra.s	.l
+.x:	cmp.l	#$7fffffff,d2
+	bne.s	.s
+	moveq	#0,d2
+.s:	move.l	d2,fx_Ord(a3)
+	move.l	#$7fffffff,fx_OrdNext(a3)
+	movem.l	(sp)+,d2/a2/a5
+	rts
+
+;--------------------------------------------------------------------
 ; NextItem - the next item from fx_Next on (an element's style in
-; fx_IStyle)
+; fx_IStyle), of order fx_Ord; at the end of the children, those of
+; the next larger order (fx_OrdNext) from the first child on
 ; Out: d0 = it or 0 (CCR set), d1 = its fx_Info (FI_xxx, grow, align)
 ;--------------------------------------------------------------------
 NextItem:
 	movem.l	a2/a5,-(sp)
 .l:	move.l	fx_Next(a3),d0
-	beq	.x
-	move.l	d0,a5
+	bne.s	.got
+	move.l	fx_OrdNext(a3),d0	; the end: the next order, if any
+	cmp.l	#$7fffffff,d0
+	beq	.none
+	move.l	d0,fx_Ord(a3)
+	move.l	#$7fffffff,fx_OrdNext(a3)
+	move.l	fx_First(a3),fx_Next(a3)
+	bra.s	.l
+.got:	move.l	d0,a5
 	move.l	n_Next(a5),fx_Next(a3)
 	move.b	n_Type(a5),d0
 	cmp.b	#DN_TEXT,d0
@@ -131,7 +179,11 @@ NextItem:
 	lea	fx_IStyle(a3),a0
 	move.b	st_Display(a0),d0
 	cmp.b	#DISP_NONE,d0
-	beq.s	.l
+	beq	.l
+	move.b	st_Order(a0),d0		; (not of this order: later)
+	bsr	OrdTake
+	beq	.l
+	lea	fx_IStyle(a3),a0
 	moveq	#0,d1			; grow, align, auto margins, shrink
 	move.b	st_Grow(a0),d1
 	moveq	#0,d0
@@ -162,6 +214,9 @@ NextItem:
 	bmi.s	.l
 	cmp.b	#' ',(a0)+
 	bls.s	.t
+	moveq	#0,d0			; (its order: 0)
+	bsr	OrdTake
+	beq	.l
 	move.l	fx_Style(a3),a1		; (its align: the container's)
 	moveq	#0,d1
 	move.b	st_AlignI(a1),d1
@@ -169,6 +224,24 @@ NextItem:
 .y:	move.l	a5,d0
 .x:	movem.l	(sp)+,a2/a5
 	tst.l	d0
+	rts
+.none:	moveq	#0,d0
+	bra.s	.x
+
+; OrdTake - (NextItem) is order d0.b the one taken now?  A larger one
+; may be the next (fx_OrdNext).  Out: d0 = 1 if so (CCR set)
+OrdTake:
+	ext.w	d0
+	ext.l	d0
+	cmp.l	fx_Ord(a3),d0
+	beq.s	.yes
+	blt.s	.no
+	cmp.l	fx_OrdNext(a3),d0
+	bge.s	.no
+	move.l	d0,fx_OrdNext(a3)
+.no:	moveq	#0,d0
+	rts
+.yes:	moveq	#1,d0
 	rts
 
 ;--------------------------------------------------------------------
@@ -229,6 +302,8 @@ Gather:
 .l:	cmp.l	#MAXITEMS,fx_N(a3)
 	bhs	.x
 	move.l	fx_Next(a3),d4		; (to go back to if it does not fit)
+	move.l	fx_Ord(a3),fx_SvOrd(a3)
+	move.l	fx_OrdNext(a3),fx_SvOrd+4(a3)
 	bsr	NextItem
 	beq	.x
 	move.l	d0,d2			; d2 = it, d3 = its info
@@ -249,6 +324,8 @@ Gather:
 	ble.s	.put
 	addq.l	#8,sp
 	move.l	d4,fx_Next(a3)
+	move.l	fx_SvOrd(a3),fx_Ord(a3)
+	move.l	fx_SvOrd+4(a3),fx_OrdNext(a3)
 	bra.s	.x
 .put:	move.l	fx_N(a3),d0
 	movem.l	(sp)+,d1/a0		; d1 = min, a0 = pref

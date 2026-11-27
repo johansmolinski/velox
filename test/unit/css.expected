@@ -322,3 +322,26 @@ text 94 8 64 10 8 f1 s0 c000000 "block no"
 text 104 8 80 10 8 f1 s0 c000000 "wider than"
 text 114 8 32 10 8 f1 s0 c000000 "this"
 
+# no <body> in the source: body rules apply to the one implied
+layout test/unit/layout/nobody.html 400 => 
+height 54
+rect 0 8 96 54 0 f0 s0 c6bbdd6
+text 2 10 40 10 8 f1 s0 c000000 "About"
+text 22 30 40 10 8 f1 s0 c000000 "Goals"
+bull 24 10 4 4 6 f0 s0 c000000 0
+text 32 30 72 10 8 f1 s0 c000000 "Platforms"
+bull 34 10 4 4 6 f0 s0 c000000 0
+text 12 106 264 10 8 f1 s0 c000000 "The content, beside the menu, not"
+text 22 106 72 10 8 f1 s0 c000000 "below it."
+
+# flex items by order (column; row with wrapping)
+layout test/unit/layout/order.html 400 => 
+height 40
+text 0 8 80 10 8 f1 s0 c000000 "first (-1)"
+text 10 8 88 10 8 f1 s0 c000000 "article (0)"
+text 20 8 104 10 8 f1 s0 c000000 "nav (order 2)"
+text 30 8 72 10 8 f1 s0 c000000 "three (0)"
+text 30 101 56 10 8 f1 s0 c000000 "one (1)"
+text 30 194 64 10 8 f1 s0 c000000 "four (1)"
+text 30 287 56 10 8 f1 s0 c000000 "two (2)"
+

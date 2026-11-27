@@ -24,3 +24,7 @@ layout test/unit/layout/classes.html 400
 layout test/unit/layout/csstable.html 400
 # inline-blocks, inline-flex, floats side by side, max-width
 layout test/unit/layout/iblock.html 400
+# no <body> in the source: body rules apply to the one implied
+layout test/unit/layout/nobody.html 400
+# flex items by order (column; row with wrapping)
+layout test/unit/layout/order.html 400

@@ -307,7 +307,7 @@ st_AlignS	rs.b	1		; an item's align-self: AI_xxx + 1, 0 auto
 st_Grow		rs.b	1		; an item's flex-grow (0 - 255)
 st_Gap		rs.b	1		; column-gap, px
 st_RGap		rs.b	1		; row-gap, px
-st_FlexPad	rs.b	1
+st_Order	rs.b	1		; an item's order (-128 .. 127)
 st_MaxW		rs.w	1		; max-width (as st_Width; an image's in
 st_MaxH		rs.w	1		;  its pixels), an image's max-height
 STYLE_SIZEOF	rs.b	0
@@ -629,6 +629,7 @@ g_ParsePos	rs.l	1		; html.s: where HtmlMore goes on
 g_ParseBase	rs.l	1		; the text (this call)
 g_ParseFinal	rs.l	1		; 1: the end of the document
 g_ParseBody	rs.l	1		; the body's content has begun
+g_ParseHasBody	rs.l	1		; a <body> was made (or implied)
 g_TokStart	rs.l	1		; the token being parsed
 g_TokEnd	rs.l	1		; after a complete start tag
 g_IncState	rs.l	1		; nav.s: 1 page shown as it comes, -1 not

@@ -154,7 +154,7 @@ StyleCompute:
 	clr.l	st_MTop(a3)
 	clr.l	st_MLeft(a3)
 	clr.l	st_Width(a3)
-	clr.l	st_FlexF(a3)		; (st_FlexF .. st_FlexPad)
+	clr.l	st_FlexF(a3)		; (st_FlexF .. st_Order)
 	clr.l	st_FlexF+4(a3)
 	clr.l	st_MaxW(a3)		; (st_MaxW, st_MaxH)
 	and.b	#(~(SF_MAUTO|SF_FLOATL|SF_FLOATR|SF_MAUTOL|SF_MAUTOR|SF_TFIXED|SF_IBLK))&$ff,st_Flags(a3)

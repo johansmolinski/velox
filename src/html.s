@@ -61,6 +61,7 @@ HtmlBegin:
 	clr.l	g_BaseHref(a4)
 	clr.l	g_ParsePos(a4)
 	clr.l	g_ParseBody(a4)
+	clr.l	g_ParseHasBody(a4)
 	tst.l	d0
 .x:	rts
 
@@ -227,10 +228,14 @@ HtmlMore:
 	movem.l	(sp)+,d2-d7/a2-a3/a5
 	rts
 
-; BodyTag - start tag d6: is the body's content beginning?
+; BodyTag - start tag d6: is the body's content beginning?  (Without a
+; <body>: one is made, ImpliedBody.)
 ; (d0, d7 kept)
 BodyTag:
-	tst.l	g_ParseBody(a4)
+	cmp.w	#TAG_BODY,d6		; (a <body> of its own)
+	bne.s	.nb
+	st	g_ParseHasBody(a4)
+.nb:	tst.l	g_ParseBody(a4)
 	bne.s	.x
 	lea	HeadTags(pc),a0
 .l:	move.w	(a0)+,d1
@@ -239,7 +244,39 @@ BodyTag:
 	bne.s	.l
 .x:	rts
 .body:	st	g_ParseBody(a4)
-	rts
+	cmp.w	#TAG_FRAMESET,d6	; (frames: no body)
+	beq.s	.x
+	bra	ImpliedBody
+
+; ImpliedBody - the body's content begins without a <body>: one is made
+; (as HTML5 does: CSS rules for body apply), an open <head> closed
+; first; it holds what follows
+; (d0, d7 kept)
+ImpliedBody:
+	tst.l	g_ParseHasBody(a4)
+	bne.s	.x
+	movem.l	d0/a5,-(sp)
+	st	g_ParseHasBody(a4)
+	bsr	CurrentNode
+	cmp.b	#DN_ELEMENT,n_Type(a0)
+	bne.s	.mk
+	cmp.w	#TAG_HEAD,n_Tag(a0)
+	bne.s	.mk
+	move.l	g_Depth(a4),d0
+	bsr	PopTo
+.mk:	moveq	#DN_ELEMENT,d0
+	moveq	#TAG_BODY,d1
+	jsr	DomNewNode
+	tst.l	d0
+	beq.s	.r
+	move.l	d0,a5
+	bsr	CurrentNode
+	move.l	a5,a1
+	jsr	DomAppend
+	move.l	a5,a0
+	bsr	Push
+.r:	movem.l	(sp)+,d0/a5
+.x:	rts
 
 HeadTags:	dc.w	TAG_HTML,TAG_HEAD,TAG_TITLE,TAG_META,TAG_LINK
 		dc.w	TAG_STYLE,TAG_SCRIPT,TAG_BASE,TAG_NOSCRIPT,-1
@@ -673,13 +710,20 @@ AddText:
 	btst	#6,d0			; TF_NOWS
 	bne.s	.x
 .add:	cmp.b	#DN_DOCUMENT,n_Type(a3)	; text in the body: it begins
-	beq.s	.nb
+	beq.s	.top
 	move.w	n_Tag(a3),d0
 	cmp.w	#TAG_HTML,d0
-	beq.s	.nb
+	beq.s	.top
 	cmp.w	#TAG_HEAD,d0
-	beq.s	.nb
+	beq.s	.top
 	st	g_ParseBody(a4)
+	bra.s	.nb
+.top:	tst.l	g_ParseHasBody(a4)	; text before a <body>: one is
+	bne.s	.nb			; implied (ImpliedBody), for it
+	st	g_ParseBody(a4)
+	bsr	ImpliedBody
+	bsr	CurrentNode
+	move.l	a0,a3
 .nb:	move.l	a2,a0
 	move.l	d2,d0
 	bsr	TextNode

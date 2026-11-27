@@ -47,7 +47,7 @@ bmh_Height		equ	2
 	xref	FmtDec,StrCopy,LogEvent,ImgNetHook
 
 MAX_IMAGES	equ	32767		; <img>s a page (PfWalk counts with dbf)
-MAX_IMAGE	equ	2*1024*1024	; bytes of an image file
+MAX_IMAGE	equ	2*1024*1024	; bytes of an image file for a datatype
 CHIP_RESERVE	equ	200*1024	; keep this much chip memory free
 RELAYOUT_EVERY	equ	4
 MY_BMF_CLEAR	equ	1
@@ -358,8 +358,6 @@ BgStep:
 	bne.s	.free
 	move.l	g_Resp+r_Body+buf_Len(a4),d0
 	beq.s	.free
-	cmp.l	#MAX_IMAGE,d0
-	bhi.s	.free
 	move.l	g_Resp+r_Body+buf_Data(a4),a0
 	jsr	PicInfo			; (Velox's own formats only)
 	tst.l	d0
@@ -643,8 +641,6 @@ ImagesStep:
 	bne	.free
 	move.l	g_Resp+r_Body+buf_Len(a4),d0
 	beq	.free
-	cmp.l	#MAX_IMAGE,d0
-	bhi	.free
 	bsr	DecLock			; (the decoder: one image at a time)
 	beq	.free
 	move.l	g_Resp+r_Body+buf_Data(a4),a0	; Velox's own decoders
@@ -659,7 +655,11 @@ ImagesStep:
 	addq.l	#1,g_ImgLoaded(a4)
 	bsr	ShareImage
 	bra	.done
-.dt:	; to a temporary file for the datatype
+.dt:	; to a temporary file for the datatype (not too big a one;
+	; Velox's own decoders take any: an animated GIF is long, its
+	; first picture is all they read)
+	cmp.l	#MAX_IMAGE,g_Resp+r_Body+buf_Len(a4)
+	bhi	.free
 	lea	TmpName(pc),a0
 	move.l	a0,d1
 	move.l	#MODE_NEWFILE,d2

@@ -26,7 +26,7 @@
 ;
 
 	include	"velox.i"
-	xref	TaskPoll
+	xref	TaskPoll,TaskNow
 
 	xdef	CssReset,CssAddSheet,CssApply,CssInvalidate,CssLoad,CssLoadFirst
 	IFD	PROFILE
@@ -111,6 +111,7 @@ CP_COLGAP	rs.b	1
 CP_ROWGAP	rs.b	1
 CP_MAXHEIGHT	rs.b	1
 CP_TLAYOUT	rs.b	1
+CP_ORDER	rs.b	1
 CP_COUNT	rs.b	0
 
 	section	code,code
@@ -251,6 +252,14 @@ CssLoadMode:
 .res:	lea	g_LinkUrl(a4),a2
 	jsr	UrlResolve
 	beq	.next
+	lea	g_LinkUrl(a4),a0	; web fonts: nothing for us in them
+	lea	SGFonts(pc),a1		; (@font-face), and a server more
+	jsr	StrIFind
+	bne	.next
+	lea	g_LinkUrl(a4),a0
+	lea	SBFonts(pc),a1
+	jsr	StrIFind
+	bne	.next
 	addq.l	#1,d3
 	cmp.l	#CSSL_CHECK,d4		; (only: is it at hand?)
 	bne.s	.get
@@ -262,12 +271,20 @@ CssLoadMode:
 .get:
 	lea	MsgSheet(pc),a0
 	jsr	GuiStatus
+	jsr	TaskNow			; d2 = when it began (ticks)
+	move.l	d0,d2
 	lea	g_LinkUrl(a4),a0
 	jsr	HttpGetCached
-	move.l	d0,-(sp)		; (for tests: "sheet URL STATUS")
-	lea	LogSheet(pc),a0
-	lea	g_LinkUrl(a4),a1
+	move.l	d0,-(sp)		; (for tests: "sheet URL STATUS", the
+	lea	LogSheet(pc),a0		;  ticks it took: "sheetget N" and
+	lea	g_LinkUrl(a4),a1	;  "sheetparse N")
 	jsr	LogEvent
+	bsr	SheetTicks
+	lea	LogSheetGet(pc),a0
+	suba.l	a1,a1
+	jsr	LogEvent
+	jsr	TaskNow
+	move.l	d0,d2
 	move.l	(sp)+,d0
 	beq.s	.fetched
 	cmp.l	#200,d0
@@ -300,6 +317,10 @@ CssLoadMode:
 	move.l	a2,a0
 	bsr	CssAddSheet
 	clr.l	g_CssBase(a4)
+	bsr	SheetTicks
+	lea	LogSheetParse(pc),a0
+	suba.l	a1,a1
+	jsr	LogEvent
 .fetched:
 	lea	g_Resp+r_Body(a4),a0
 	jsr	BufFree
@@ -325,6 +346,14 @@ CssLoadMode:
 	tst.l	d0
 	rts
 
+; SheetTicks - (CssLoad) ticks since d2; Out: d0
+SheetTicks:
+	jsr	TaskNow
+	sub.l	d2,d0
+	bpl.s	.x
+	add.l	#24*60*60*50,d0		; (past midnight)
+.x:	rts
+
 AnRel:		dc.b	"rel",0
 AnHref:		dc.b	"href",0
 AnMedia:	dc.b	"media",0
@@ -333,6 +362,10 @@ AnId:		dc.b	"id",0
 AnClass:	dc.b	"class",0
 SStylesheet:	dc.b	"stylesheet",0
 LogSheet:	dc.b	"sheet",0
+LogSheetGet:	dc.b	"sheetget",0
+LogSheetParse:	dc.b	"sheetparse",0
+SGFonts:	dc.b	"//fonts.googleapis.com/",0
+SBFonts:	dc.b	"//fonts.bunny.net/",0
 SAlternate:	dc.b	"alternate",0
 MsgSheet:	dc.b	"Loading style sheet...",0
 	even
@@ -1635,6 +1668,7 @@ PropNames:
 	PN	CP_ROWGAP,"row-gap"
 	PN	CP_MAXHEIGHT,"max-height"
 	PN	CP_TLAYOUT,"table-layout"
+	PN	CP_ORDER,"order"
 	dc.b	0
 	even
 
@@ -3179,6 +3213,7 @@ PropJump:
 	dc.w	PFlex-PropJump,PGrow-PropJump,PShrink-PropJump
 	dc.w	PWidth-PropJump,PGap-PropJump,PColGap-PropJump
 	dc.w	PRowGap-PropJump,PMaxHeight-PropJump,PTLayout-PropJump
+	dc.w	POrder-PropJump
 	IFNE	(*-PropJump)-2*CP_COUNT
 	FAIL	"PropJump: one entry per CP_xxx"
 	ENDC
@@ -3339,6 +3374,32 @@ PShrink:				; flex-shrink: 0 keeps the width
 PGrow:	move.l	a2,a0
 	bsr	FlexNum
 	move.b	d0,st_Grow(a3)
+	rts
+
+; POrder - order: an integer, -128 .. 127
+POrder:	move.l	a2,a0
+	bsr	SkipWs
+	move.b	(a0),d0
+	move.l	d0,-(sp)
+	cmp.b	#'-',d0
+	beq.s	.s
+	cmp.b	#'+',d0
+	bne.s	.n
+.s:	addq.l	#1,a0
+.n:	jsr	ParseDec
+	cmp.l	#127,d0
+	bls.s	.c
+	moveq	#127,d0
+	cmp.b	#'-',3(sp)
+	bne.s	.c
+	moveq	#-128,d0		; (128 and more: -128)
+	addq.l	#4,sp
+	bra.s	.set
+.c:	cmp.b	#'-',3(sp)
+	bne.s	.p
+	neg.l	d0
+.p:	addq.l	#4,sp
+.set:	move.b	d0,st_Order(a3)
 	rts
 
 ; FlexNum - a number at a0 (a fraction of 0, like 0.5, counts as 1),

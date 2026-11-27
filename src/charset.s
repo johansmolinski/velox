@@ -139,15 +139,25 @@ CharsetDetect:
 	tst.l	d0
 	bne.s	.x
 .doc:	; <meta charset="..."> or http-equiv content="...; charset=..."
-	move.l	a3,a0
-	lea	CsKey(pc),a1
-	jsr	StrIFind
+	; in the first 4 KB (only there: not the whole page)
+	move.l	a3,a2
+	move.l	#4096,d0
+.f:	move.b	(a2),d1
 	beq.s	.auto
-	move.l	a0,d0
-	sub.l	a3,d0
-	cmp.l	#4096,d0
-	bhi.s	.auto
-	bsr.s	CharsetName
+	or.b	#$20,d1
+	cmp.b	#'c',d1
+	bne.s	.n
+	move.l	d0,-(sp)
+	move.l	a2,a0
+	lea	CsKey(pc),a1
+	jsr	StrIPrefix
+	movem.l	(sp)+,d0
+	bne.s	.got
+.n:	addq.l	#1,a2
+	subq.l	#1,d0
+	bne.s	.f
+	bra.s	.auto
+.got:	bsr.s	CharsetName
 	bra.s	.x
 .auto:	moveq	#CS_AUTO,d0
 .x:	movem.l	(sp)+,a2-a3

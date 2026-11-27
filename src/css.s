@@ -575,6 +575,59 @@ ScanTo:
 .x:	movem.l	(sp)+,d2-d3
 	rts
 
+; ScanDecl - (ParseDecls) the end of a value: the first ';', '}' or
+; '{' outside strings, parentheses and brackets, in one pass
+; In: a0 = text; Out: a0 at it or at the NUL, d0 = that character
+ScanDecl:
+	movem.l	d2/a1,-(sp)
+	lea	DeclCls(pc),a1
+	moveq	#0,d2			; d2 = nesting
+	moveq	#0,d0
+.l:	move.b	(a0)+,d0
+	move.b	(a1,d0.w),d1
+	beq.s	.l			; (most: nothing to look at)
+	subq.b	#2,d1
+	bmi.s	.end			; NUL
+	beq.s	.stop			; ; { }
+	subq.b	#1,d1
+	beq.s	.open
+	subq.b	#1,d1
+	beq.s	.close
+	move.b	d0,d1			; a string: to its quote
+.q:	move.b	(a0)+,d0
+	beq.s	.end
+	cmp.b	#92,d0			; (backslash escapes)
+	bne.s	.q1
+	tst.b	(a0)+
+	bne.s	.q
+	bra.s	.end
+.q1:	cmp.b	d1,d0
+	bne.s	.q
+	bra.s	.l
+.open:	addq.w	#1,d2
+	bra.s	.l
+.close:	tst.w	d2
+	beq.s	.l
+	subq.w	#1,d2
+	bra.s	.l
+.stop:	tst.w	d2
+	bne.s	.l
+.end:	subq.l	#1,a0
+	move.b	(a0),d0
+	movem.l	(sp)+,d2/a1
+	rts
+
+; DeclCls - (ScanDecl) 0 other, 1 NUL, 2 ; { }, 3 ( [, 4 ) ], 5 quotes
+DeclCls:
+	dc.b	1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	dc.b	0,0,5,0,0,0,0,5,3,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,4,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,2,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
 ; SkipWs - In/Out: a0
 SkipWs:
 .l:	move.b	(a0),d0
@@ -1027,26 +1080,15 @@ ParseDecls:
 .colon:	addq.l	#1,a0
 	bsr	SkipWs
 .val:	move.l	a0,a2			; value up to ';' or '}' (or '{')
-	move.l	a2,a0
-.vl:	moveq	#';',d0
-	bsr	ScanTo
-	move.l	a0,d3			; (';' or NUL)
-	move.l	a2,a0
-	moveq	#'}',d0
-	bsr	ScanTo
-	cmp.l	d3,a0
-	bhs.s	.v1
-	move.l	a0,d3			; '}' comes first
-.v1:	move.l	a2,a0
-	moveq	#'{',d0
-	bsr	ScanTo
-	cmp.l	d3,a0
-	bhs.s	.v2
+	bsr	ScanDecl
+	move.l	a0,d3			; (';', '}' or NUL)
+	cmp.b	#'{',d0
+	bne.s	.v2
 	; a nested rule "sel { ... }": skip it whole
 	lea	1(a0),a0
 	bsr	SkipBlock
 	move.l	a0,a2
-	bra.s	.loop
+	bra	.loop
 .v2:	tst.l	d2
 	beq	.skip
 	move.l	d3,a1
@@ -1547,28 +1589,32 @@ DeclValue:
 
 ; PropId - property name at a0 -> d0 = CP_xxx (0 unknown); a0 after it
 PropId:
-	movem.l	d2/a2-a3,-(sp)
+	movem.l	d2-d4/a2-a3,-(sp)
 	move.l	a0,a2
 	lea	g_CssName(a4),a3	; lower case copy (max 31)
-	moveq	#30,d2
+	lea	IdentLc(pc),a1
+	moveq	#0,d3			; d3 = its length
+	moveq	#0,d0
 .l:	move.b	(a2),d0
-	cmp.b	#'-',d0
-	beq.s	.ch
-	cmp.b	#'_',d0
-	beq.s	.ch
-	bsr	IsAlnumC
+	move.b	(a1,d0.w),d1
 	beq.s	.e
-.ch:	addq.l	#1,a2
-	tst.w	d2
-	bmi.s	.l
-	jsr	ToLower
-	move.b	d0,(a3)+
-	subq.w	#1,d2
+	addq.l	#1,a2
+	cmp.w	#31,d3
+	bhs.s	.l
+	move.b	d1,(a3)+
+	addq.w	#1,d3
 	bra.s	.l
 .e:	clr.b	(a3)
-	lea	PropNames(pc),a3
-.f:	move.b	(a3)+,d2		; id, 0 = end
+	move.b	g_CssName(a4),d4	; d4 = its first letter
+	lea	PropNames(pc),a3	; id, length, name, 0: only the names
+	moveq	#0,d1			; of its length and first letter are
+.f:	move.b	(a3)+,d2		; compared (id; 0 = end)
 	beq.s	.nf
+	move.b	(a3)+,d1
+	cmp.b	d1,d3
+	bne.s	.s
+	cmp.b	(a3),d4
+	bne.s	.s
 	lea	g_CssName(a4),a0
 	move.l	a3,a1
 .c:	move.b	(a1)+,d0
@@ -1579,13 +1625,24 @@ PropId:
 	moveq	#0,d0
 	move.b	d2,d0
 	bra.s	.x
-.s:	tst.b	(a3)+
-	bne.s	.s
+.s:	lea	1(a3,d1.w),a3		; (the next one)
 	bra.s	.f
 .nf:	moveq	#0,d0
 .x:	move.l	a2,a0
-	movem.l	(sp)+,d2/a2-a3
+	movem.l	(sp)+,d2-d4/a2-a3
 	rts
+
+; IdentLc - (PropId) a property name's characters in lower case; 0
+; for others
+IdentLc:
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,45,0,0,48,49,50,51,52,53,54,55,56,57,0,0,0,0,0,0
+	dc.b	0,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,0,0,0,0,95
+	dc.b	0,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,0,0,0,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	dc.b	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 ; IsAlnumC - In: d0.b; Out: Z clear if a letter or digit (d0, d1 kept)
 IsAlnumC:
@@ -1608,8 +1665,10 @@ IsAlnumC:
 	and.b	#$fb,ccr		; Z clear: yes
 	rts
 
-PN	MACRO
-	dc.b	\1,\2,0
+PN	MACRO				; id, length, name, 0
+	dc.b	\1,.e\@-*-1
+	dc.b	\2
+.e\@:	dc.b	0
 	ENDM
 PropNames:
 	PN	CP_DISPLAY,"display"

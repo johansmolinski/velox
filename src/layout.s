@@ -23,6 +23,7 @@
 	xdef	LayoutDocument,LayoutChildren,LayoutNode,LayoutBlockContent
 	xdef	FlushLine,LineReset,AddMargin,AddRun,RunCount,RunPtr,Measure
 	xdef	ApplyPendingMargin,IntAttr,ClearFloats,FindAnchor,LayoutRange
+	xdef	BorderRects
 	xdef	LayRunCount,LayRunPtr,LayPoll,LayoutBlock
 	xref	BufAppend
 	IFD	PROFILE
@@ -278,8 +279,8 @@ LayoutNode:
 	bra	.pop
 .inl0:	tst.l	st_Bg(a3)		; a background or an outline: a box
 	bpl.s	.ibox
-	tst.l	st_Edge(a3)
-	bpl.s	.ibox
+	tst.l	st_BW(a3)		; (a border)
+	bne.s	.ibox
 	tst.l	st_Shadow(a3)
 	bmi.s	.inl
 .ibox:	bsr	InlineBox
@@ -370,9 +371,11 @@ InlineBox:
 	move.l	st_Bg(a3),ru_Color(a0)	; (-1: none)
 	clr.l	ru_Text(a0)		; (no background image)
 	clr.l	ru_Len(a0)
-	move.l	st_Edge(a3),d0		; the outline: a run like it (the
-	bpl.s	.ol			;  border's, else the shadow's)
-	move.l	st_Shadow(a3),d0
+	tst.l	st_BW(a3)		; the outline: a run like it (the
+	beq.s	.osh			;  border's, else the shadow's)
+	bsr	EdgeColour
+	bra.s	.ol
+.osh:	move.l	st_Shadow(a3),d0
 	bmi.s	.kids
 .ol:	move.l	d0,-(sp)
 	bsr	AddRun
@@ -429,6 +432,14 @@ InlineBox:
 	bsr	LayoutChildren
 .x:	movem.l	(sp)+,d2-d7
 	rts
+
+; EdgeColour - the border colour of style a3 (st_Edge, else the text's)
+; Out: d0
+EdgeColour:
+	move.l	st_Edge(a3),d0
+	bpl.s	.x
+	move.l	st_Color(a3),d0
+.x:	rts
 
 ; BoxTextW - (InlineBox) the width of the text in element a5, in font
 ; d6 (its own; one line); Out: d0
@@ -530,6 +541,7 @@ AnName:	dc.b	"name",0
 ;--------------------------------------------------------------------
 LayoutBlock:
 	movem.l	d2-d7/a2-a3/a5,-(sp)
+	subq.l	#4,sp			; (sp): its border's top, or -1
 	move.l	a0,a5
 	move.l	a1,a3
 	cmp.b	#DISP_TABLE,st_Display(a3)	; a CSS table without rows or
@@ -615,10 +627,20 @@ LayoutBlock:
 	beq.s	.nobg
 	move.l	d0,a0
 	move.b	#RT_RECT,ru_Type(a0)
-	move.l	g_LayY(a4),ru_Y(a0)
-	move.w	g_LayLeft+2(a4),ru_X(a0)	; the (narrowed) box
+	moveq	#0,d1			; the box with its paddings
+	move.b	st_Pad(a3),d1
+	move.l	g_LayY(a4),d0
+	sub.l	d1,d0
+	move.l	d0,ru_Y(a0)
+	move.b	st_Pad+3(a3),d1
+	move.l	g_LayLeft(a4),d0
+	sub.l	d1,d0
+	move.w	d0,ru_X(a0)
 	move.l	g_LayRight(a4),d0
 	sub.l	g_LayLeft(a4),d0
+	add.l	d1,d0
+	move.b	st_Pad+1(a3),d1
+	add.l	d1,d0
 	move.w	d0,ru_W(a0)
 	move.l	st_Bg(a3),ru_Color(a0)
 	move.l	st_BgImg(a3),ru_Text(a0)	; (its image)
@@ -630,7 +652,22 @@ LayoutBlock:
 	move.l	d0,d7			; index of the rectangle
 	bsr	LineReset
 .nobg:
-	move.l	a5,a0
+	moveq	#-1,d0			; borders: their top (above the
+	move.l	d0,(sp)			;  paddings)
+	tst.l	st_BW(a3)
+	beq.s	.nobd
+	cmp.b	#DISP_TABLE,st_Display(a3)	; (tables: not yet)
+	beq.s	.nobd
+	bsr	ApplyPendingMargin
+	bsr	LineReset
+	moveq	#0,d1
+	move.b	st_Pad(a3),d1
+	move.l	g_LayY(a4),d0
+	sub.l	d1,d0
+	move.b	st_BW(a3),d1
+	sub.l	d1,d0
+	move.l	d0,(sp)
+.nobd:	move.l	a5,a0
 	move.l	a3,a1
 	cmp.b	#DISP_TABLE,st_Display(a3)
 	bne.s	.content
@@ -647,10 +684,17 @@ LayoutBlock:
 	bmi.s	.norect
 	move.l	d7,d0
 	bsr	LayRunPtr
+	moveq	#0,d1			; (and its bottom padding)
+	move.b	st_Pad+2(a3),d1
 	move.l	g_LayY(a4),d0
+	add.l	d1,d0
 	sub.l	ru_Y(a0),d0
 	move.w	d0,ru_H(a0)
 .norect:
+	move.l	(sp),d0			; its borders
+	bmi.s	.nobd2
+	bsr	BlockBorder
+.nobd2:
 	clr.l	g_Marker(a4)
 	move.l	d2,g_LayLeft(a4)
 	move.l	d3,g_LayRight(a4)
@@ -664,7 +708,115 @@ LayoutBlock:
 	moveq	#0,d0
 	move.w	st_MBottom(a3),d0
 	bsr	AddMargin
+	addq.l	#4,sp
 	movem.l	(sp)+,d2-d7/a2-a3/a5
+	rts
+
+; BlockBorder - (LayoutBlock, its content done) the borders of block
+; style a3 around its paddings, from y d0 down to its content's end and
+; bottom padding
+BlockBorder:
+	lea	-BR_SIZEOF(sp),sp
+	move.l	d0,br_Top(sp)
+	moveq	#0,d0
+	moveq	#0,d1
+	move.b	st_Pad+3(a3),d0
+	move.b	st_BW+3(a3),d1
+	add.l	d1,d0
+	neg.l	d0
+	add.l	g_LayLeft(a4),d0
+	move.l	d0,br_Left(sp)
+	moveq	#0,d0
+	move.b	st_Pad+1(a3),d0
+	move.b	st_BW+1(a3),d1
+	add.l	d1,d0
+	add.l	g_LayRight(a4),d0
+	move.l	d0,br_Right(sp)
+	moveq	#0,d0
+	move.b	st_Pad+2(a3),d0
+	move.b	st_BW+2(a3),d1
+	add.l	d1,d0
+	add.l	g_LayY(a4),d0
+	move.l	d0,br_Bottom(sp)
+	bsr	EdgeColour
+	move.l	d0,br_Colour(sp)
+	move.l	st_BW(a3),br_W(sp)
+	move.l	sp,a0
+	bsr.s	BorderRects
+	lea	BR_SIZEOF(sp),sp
+	rts
+
+;--------------------------------------------------------------------
+; BorderRects - the borders of a box: a filled rectangle each, inside
+; its edges
+; In: a0 = br_xxx: left, top, right, bottom, colour, widths (t r b l)
+;--------------------------------------------------------------------
+BorderRects:
+	movem.l	d2-d7/a2,-(sp)
+	move.l	a0,a2
+	movem.l	(a2),d3-d6		; d3 left, d4 top, d5 right, d6 bottom
+	move.l	br_Colour(a2),d7
+	moveq	#0,d2			; top: across, its width high
+	move.b	br_W(a2),d2
+	beq.s	.b
+	move.l	d3,d0
+	move.l	d4,d1
+	bsr.s	.run
+	beq.s	.b
+	move.l	d5,d0
+	sub.l	d3,d0
+	move.w	d0,ru_W(a0)
+	move.w	d2,ru_H(a0)
+.b:	move.b	br_W+2(a2),d2		; bottom
+	beq.s	.lf
+	move.l	d3,d0
+	move.l	d6,d1
+	sub.l	d2,d1
+	bsr.s	.run
+	beq.s	.lf
+	move.l	d5,d0
+	sub.l	d3,d0
+	move.w	d0,ru_W(a0)
+	move.w	d2,ru_H(a0)
+.lf:	move.b	br_W+3(a2),d2		; left: down, its width wide
+	beq.s	.r
+	move.l	d3,d0
+	move.l	d4,d1
+	bsr.s	.run
+	beq.s	.r
+	move.w	d2,ru_W(a0)
+	move.l	d6,d0
+	sub.l	d4,d0
+	move.w	d0,ru_H(a0)
+.r:	move.b	br_W+1(a2),d2		; right
+	beq.s	.x
+	move.l	d5,d0
+	sub.l	d2,d0
+	move.l	d4,d1
+	bsr.s	.run
+	beq.s	.x
+	move.w	d2,ru_W(a0)
+	move.l	d6,d0
+	sub.l	d4,d0
+	move.w	d0,ru_H(a0)
+.x:	movem.l	(sp)+,d2-d7/a2
+	rts
+; .run - a RECT run at x d0, y d1, colour d7: Out: a0, Z set if no
+; memory
+.run:	movem.l	d0-d1,-(sp)
+	bsr	AddRun
+	beq.s	.none
+	move.l	d0,a0
+	move.l	4(sp),ru_Y(a0)
+	move.l	(sp),d0
+	move.w	d0,ru_X(a0)
+	move.b	#RT_RECT,ru_Type(a0)
+	move.l	d7,ru_Color(a0)
+	addq.l	#8,sp
+	moveq	#1,d0
+	rts
+.none:	addq.l	#8,sp
+	moveq	#0,d0
 	rts
 
 ;--------------------------------------------------------------------

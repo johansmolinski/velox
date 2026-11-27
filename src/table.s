@@ -23,7 +23,7 @@
 	xref	LayPoll
 	xref	LineReset,AddRun,LayRunPtr,LayRunCount,ApplyPendingMargin
 	xref	Measure,DomGetAttr,ParseDec,FormIsControl,FormControlSize
-	xref	ClearFloats,LayoutRange
+	xref	ClearFloats,LayoutRange,BorderRects
 
 MAXCOLS		equ	48
 MAXSPANS	equ	32		; colspan cells applied after the others
@@ -66,6 +66,14 @@ tb_Css		rs.l	1		; a CSS table: 1 rows, 2 one row (TM_xxx)
 tb_TFix		rs.l	1		; table-layout: fixed (and a width)
 tb_Group	rs.l	1		; CSS: the cell is anonymous (IsCell):
 tb_GLast	rs.l	1		; ... nodes up to this one
+tb_RowRun	rs.l	1		; the row's first run
+tb_CBW		rs.l	MAXCOLS		; a cell's border widths (st_BW),
+tb_CBC		rs.l	MAXCOLS		; colour,
+tb_CBX		rs.l	MAXCOLS		; x .. x (words) (CellBorder)
+tb_BestH	rs.l	1		; the tallest row: its height,
+tb_BestTop	rs.l	1		; top,
+tb_BestRun	rs.l	1		; first run and
+tb_BestEnd	rs.l	1		; the run after it (StretchRow)
 tb_SIZEOF	rs.b	0
 
 	section	code,code
@@ -476,6 +484,7 @@ LayoutTable:
 
 	; rows
 	bsr	RsClear
+	clr.l	tb_BestH(a3)
 	sub.l	a2,a2
 .row:	move.l	a2,a1
 	bsr	NextRow
@@ -488,6 +497,8 @@ LayoutTable:
 	beq.s	.row
 	move.l	g_LayY(a4),tb_RowTop(a3)
 	move.l	g_LayY(a4),tb_RowBottom(a3)
+	jsr	LayRunCount
+	move.l	d0,tb_RowRun(a3)
 	clr.l	tb_NCells(a3)
 	bsr	RsAge
 	moveq	#0,d5			; column
@@ -535,6 +546,18 @@ LayoutTable:
 	move.l	#-1,(a0,d4.l*4)
 	lea	tb_Box(a3),a0
 	move.l	#-1,(a0,d4.l*4)
+	lea	tb_CBW(a3),a0		; its borders: drawn at the row's end
+	move.l	tb_CellStyle+st_BW(a3),(a0,d4.l*4)
+	move.l	tb_CellStyle+st_Edge(a3),d0
+	bpl.s	.cbc
+	move.l	tb_CellStyle+st_Color(a3),d0
+.cbc:	lea	tb_CBC(a3),a0
+	move.l	d0,(a0,d4.l*4)
+	move.w	d2,d0
+	swap	d0
+	move.w	d3,d0
+	lea	tb_CBX(a3),a0
+	move.l	d0,(a0,d4.l*4)
 	lea	tb_CellStyle(a3),a0	; the cell's colour/image, or the row's
 	move.l	st_Bg(a0),d1
 	bpl.s	.cim
@@ -632,8 +655,9 @@ LayoutTable:
 	move.w	tb_CellStyle+st_MBottom(a3),d1
 	ext.l	d1
 	add.l	d1,d0
-.hpad:	moveq	#0,d1			; height="..." on the cell
-	move.w	tb_CellStyle+st_Height(a3),d1
+.hpad:	move.w	tb_CellStyle+st_Height(a3),d1	; height="..." on the
+	ble.s	.hok				; cell (not a percent)
+	ext.l	d1
 	add.l	tb_RowTop(a3),d1
 	cmp.l	d1,d0
 	bge.s	.hok
@@ -675,6 +699,7 @@ LayoutTable:
 	move.l	tb_NCells(a3),d4
 .fix:	subq.l	#1,d4
 	bmi.s	.fixd
+	bsr	CellBorder
 	lea	tb_Rect(a3),a0
 	move.l	(a0,d4.l*4),d0
 	bmi.s	.f2
@@ -687,13 +712,28 @@ LayoutTable:
 	move.w	d2,ru_H(a0)
 	bra.s	.fix
 .fixd:	bsr	RsFix
-	move.l	tb_RowBottom(a3),d0
+	move.l	tb_RowBottom(a3),d0	; the tallest row (StretchRow)
+	sub.l	tb_RowTop(a3),d0
+	cmp.l	tb_BestH(a3),d0
+	ble.s	.notal
+	move.l	d0,tb_BestH(a3)
+	move.l	tb_RowTop(a3),tb_BestTop(a3)
+	move.l	tb_RowRun(a3),tb_BestRun(a3)
+	jsr	LayRunCount
+	move.l	d0,tb_BestEnd(a3)
+.notal:	move.l	tb_RowBottom(a3),d0
 	add.l	tb_Spacing(a3),d0
 	move.l	d0,g_LayY(a4)
 	clr.l	g_PendMargin(a4)
 	bra	.row
 .rowsd:
-	move.l	tb_Border(a3),d0
+	bsr	TableHeight		; a height given: the tallest row
+	ble.s	.nost			; takes what is missing
+	move.l	d0,-(sp)
+	bsr	StretchRow
+	move.l	(sp)+,d0
+	add.l	d0,g_LayY(a4)
+.nost:	move.l	tb_Border(a3),d0
 	add.l	d0,g_LayY(a4)
 	move.l	g_LayY(a4),d2
 	sub.l	tb_Top(a3),d2
@@ -709,6 +749,108 @@ LayoutTable:
 	jsr	LineReset
 	lea	tb_SIZEOF(sp),sp
 	movem.l	(sp)+,d2-d7/a2-a3/a5
+	rts
+
+; CellBorder - (LayoutTable, at a row's end) the borders of cell d4
+; (tb_CBW ..), the row d2 high
+CellBorder:
+	lea	tb_CBW(a3),a0
+	move.l	(a0,d4.l*4),d0
+	beq.s	.x
+	lea	-BR_SIZEOF(sp),sp
+	move.l	d0,br_W(sp)
+	lea	tb_CBC(a3),a0
+	move.l	(a0,d4.l*4),br_Colour(sp)
+	lea	tb_CBX(a3),a0
+	move.l	(a0,d4.l*4),d0
+	moveq	#0,d1
+	move.w	d0,d1
+	move.l	d1,br_Right(sp)
+	swap	d0
+	move.w	d0,d1
+	move.l	d1,br_Left(sp)
+	move.l	tb_RowTop(a3),d0
+	move.l	d0,br_Top(sp)
+	add.l	d2,d0
+	move.l	d0,br_Bottom(sp)
+	move.l	sp,a0
+	jsr	BorderRects
+	lea	BR_SIZEOF(sp),sp
+.x:	rts
+
+; TableHeight - (LayoutTable, rows done) how much lower the table must
+; end for its height (px; a percent of the window, only for a table
+; that is <body>/<html> or in one: else it is of a cell, say)
+; Out: d0 = that, <= 0 if none (CCR set)
+TableHeight:
+	move.l	tb_Style(a3),a0
+	move.w	st_Height(a0),d0
+	beq.s	.x
+	ext.l	d0
+	bpl.s	.px
+	move.w	n_Tag(a5),d1		; (the table, or its parent)
+	cmp.w	#TAG_BODY,d1
+	beq.s	.pc
+	cmp.w	#TAG_HTML,d1
+	beq.s	.pc
+	move.l	n_Parent(a5),d1
+	beq.s	.no
+	move.l	d1,a1
+	move.w	n_Tag(a1),d1
+	cmp.w	#TAG_BODY,d1
+	beq.s	.pc
+	cmp.w	#TAG_HTML,d1
+	bne.s	.no
+.pc:	neg.l	d0
+	move.l	g_PageH(a4),d1
+	mulu.l	d1,d0
+	divu.l	#100,d0
+.px:	add.l	tb_Top(a3),d0		; its bottom then
+	sub.l	g_LayY(a4),d0
+	sub.l	tb_Border(a3),d0
+.x:	tst.l	d0
+	rts
+.no:	moveq	#0,d0
+	rts
+
+; StretchRow - the tallest row d0 px taller: the runs below it lower,
+; its cells' boxes taller
+StretchRow:
+	movem.l	d2-d4,-(sp)
+	move.l	d0,d2
+	tst.l	tb_BestH(a3)		; (no rows)
+	beq.s	.x
+	jsr	LayRunCount
+	move.l	d0,d3
+	move.l	tb_BestEnd(a3),d4
+.a:	cmp.l	d3,d4			; below it: lower
+	bhs.s	.b
+	move.l	d4,d0
+	jsr	LayRunPtr
+	add.l	d2,ru_Y(a0)
+	addq.l	#1,d4
+	bra.s	.a
+.b:	move.l	tb_BestRun(a3),d4	; its cells' backgrounds, outlines
+.c:	cmp.l	tb_BestEnd(a3),d4
+	bhs.s	.x
+	move.l	d4,d0
+	jsr	LayRunPtr
+	move.b	ru_Type(a0),d0
+	cmp.b	#RT_RECT,d0
+	beq.s	.r
+	cmp.b	#RT_BOX,d0
+	bne.s	.n
+.r:	move.l	ru_Y(a0),d0
+	cmp.l	tb_BestTop(a3),d0
+	bne.s	.n
+	moveq	#0,d0
+	move.w	ru_H(a0),d0
+	cmp.l	tb_BestH(a3),d0
+	bne.s	.n
+	add.w	d2,ru_H(a0)
+.n:	addq.l	#1,d4
+	bra.s	.c
+.x:	movem.l	(sp)+,d2-d4
 	rts
 
 ; BoxRun - a table-wide RECT/BOX run at the table top

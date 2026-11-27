@@ -310,6 +310,9 @@ st_RGap		rs.b	1		; row-gap, px
 st_Order	rs.b	1		; an item's order (-128 .. 127)
 st_MaxW		rs.w	1		; max-width (as st_Width; an image's in
 st_MaxH		rs.w	1		;  its pixels), an image's max-height
+st_BW		rs.b	4		; border widths t r b l (px; also in
+					; st_MTop..: not inherited; colour:
+					; st_Edge, -1 the text's)
 STYLE_SIZEOF	rs.b	0
 SK_GEN		equ	0		; n_Style (style.s): g_StyleGen,
 SK_PARENT	equ	4		; the parent's style,
@@ -443,6 +446,15 @@ ru_Len		rs.l	1
 ru_Link		rs.l	1		; <a> element (or form control)
 RUN_SIZEOF	rs.b	0
 RFB_IBLK	equ	0		; ru_Flags bit (iblock.s)
+
+	RSRESET				; a box's borders (BorderRects)
+br_Left		rs.l	1
+br_Top		rs.l	1
+br_Right	rs.l	1
+br_Bottom	rs.l	1
+br_Colour	rs.l	1
+br_W		rs.b	4		; widths t r b l
+BR_SIZEOF	rs.b	0
 
 ;--------------------------------------------------------------------
 ; FormState - state of a form control (in the element's n_Data2)
@@ -791,7 +803,9 @@ g_KeyChars	rs.b	8
 g_CssHidden	rs.l	1		; "visually hidden" detection bits:
 					; 0 positioned, 1 off screen/clipped,
 					; 2 width <= 1, 3 height <= 1
-g_CssBox	rs.l	8		; CSS margins, paddings (t r b l), -1 unset
+g_CssBox	rs.l	16		; CSS margins, paddings, border widths,
+					; border styles (1 shown, 0 none) (each
+					; t r b l), -1 unset
 g_CssMatch	rs.l	CSS_MAXMATCH	; matching scratch
 g_CssNMatch	rs.l	1
 g_CssAncP	rs.l	2		; n_Anc of the element's parent (CssMatch)

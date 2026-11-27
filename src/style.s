@@ -157,6 +157,7 @@ StyleCompute:
 	clr.l	st_FlexF(a3)		; (st_FlexF .. st_Order)
 	clr.l	st_FlexF+4(a3)
 	clr.l	st_MaxW(a3)		; (st_MaxW, st_MaxH)
+	clr.l	st_BW(a3)
 	and.b	#(~(SF_MAUTO|SF_FLOATL|SF_FLOATR|SF_MAUTOL|SF_MAUTOR|SF_TFIXED|SF_IBLK))&$ff,st_Flags(a3)
 
 	; user agent defaults
@@ -472,8 +473,9 @@ StyleCompute:
 	move.w	g_FontH+2(a4),d0
 	bsr	ParseLength
 	tst.l	d1
-	bne.s	.x			; percent heights are ignored
-	move.w	d0,st_Height(a3)
+	beq.s	.hpx			; (percent: negative; a table's of
+	neg.l	d0			;  the window, LayoutTable)
+.hpx:	move.w	d0,st_Height(a3)
 .x:	movem.l	(sp)+,d2-d4/a2-a3/a5
 	rts
 

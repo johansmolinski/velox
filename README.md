@@ -23,7 +23,8 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
 - CSS subset: selectors (including `:not()`, `:is()`, attribute and
   structural ones) with specificity, colors (also `rgb()`, `hsl()`
   and `calc()` in them), custom properties of the root with `var()`,
-  fonts, margins, padding, borders, widths, alignment, display, media
+  fonts, margins, padding, borders (solid, one colour), widths, table
+  heights, alignment, display, media
   queries; flexbox (rows and columns: grow, shrink, basis, wrap, gap,
   justify-content, align-items, auto margins, order); CSS tables
   (`display: table`, `table-row`, `table-cell` on any element, also

@@ -28,3 +28,5 @@ layout test/unit/layout/iblock.html 400
 layout test/unit/layout/nobody.html 400
 # flex items by order (column; row with wrapping)
 layout test/unit/layout/order.html 400
+# borders: blocks (around their paddings), cells (the row's height), inline
+layout test/unit/layout/borders.html 400

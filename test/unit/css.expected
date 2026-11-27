@@ -324,15 +324,17 @@ text 114 8 32 10 8 f1 s0 c000000 "this"
 
 # no <body> in the source: body rules apply to the one implied
 layout test/unit/layout/nobody.html 400 => 
-height 54
-rect 0 8 96 54 0 f0 s0 c6bbdd6
+height 300
+rect 0 8 193 260 0 f0 s0 c6bbdd6
 text 2 10 40 10 8 f1 s0 c000000 "About"
 text 22 30 40 10 8 f1 s0 c000000 "Goals"
 bull 24 10 4 4 6 f0 s0 c000000 0
 text 32 30 72 10 8 f1 s0 c000000 "Platforms"
 bull 34 10 4 4 6 f0 s0 c000000 0
-text 12 106 264 10 8 f1 s0 c000000 "The content, beside the menu, not"
-text 22 106 72 10 8 f1 s0 c000000 "below it."
+text 12 203 184 10 8 f1 s0 c000000 "The content, beside the"
+text 22 203 152 10 8 f1 s0 c000000 "menu, not below it."
+text 270 8 144 10 8 f1 s0 c000000 "The footer, at the"
+text 280 8 168 10 8 f1 s0 c000000 "bottom of the window."
 
 # flex items by order (column; row with wrapping)
 layout test/unit/layout/order.html 400 => 
@@ -344,4 +346,32 @@ text 30 8 72 10 8 f1 s0 c000000 "three (0)"
 text 30 101 56 10 8 f1 s0 c000000 "one (1)"
 text 30 194 64 10 8 f1 s0 c000000 "four (1)"
 text 30 287 56 10 8 f1 s0 c000000 "two (2)"
+
+# borders: blocks (around their paddings), cells (the row's height), inline
+layout test/unit/layout/borders.html 400 => 
+height 112
+rect 2 10 380 14 0 f0 s0 ceeeeee
+text 4 12 80 10 8 f1 s0 c000000 "Boxed text"
+rect 0 8 384 2 0 f0 s0 cff0000
+rect 16 8 384 2 0 f0 s0 cff0000
+rect 0 8 2 18 0 f0 s0 cff0000
+rect 0 390 2 18 0 f0 s0 cff0000
+rect 18 8 373 10 0 f0 s0 c6bbdd6
+text 18 8 88 10 8 f1 s0 c000000 "Side border"
+rect 18 381 11 10 0 f0 s0 c007b9c
+text 29 8 112 10 8 f1 s0 c000000 "Top and bottom"
+rect 28 8 384 1 0 f0 s0 c00ff00
+rect 39 8 384 1 0 f0 s0 c00ff00
+text 40 8 168 10 8 f1 s0 c000000 "No border: style none"
+text 50 8 152 10 8 f1 s0 c000000 "No border: no style"
+text 70 8 16 10 8 f1 s0 c000000 "An"
+rect 70 33 64 10 8 f1 s1 cffffff L
+box  70 33 64 10 8 f1 s1 c0000ff L
+text 70 33 64 10 8 f1 s1 c0000ee L "outlined"
+text 70 106 32 10 8 f1 s0 c000000 "link"
+text 91 9 32 10 8 f1 s0 c000000 "menu"
+text 101 9 72 10 8 f1 s0 c000000 "two lines"
+text 91 222 56 10 8 f1 s0 c000000 "content"
+rect 90 387 4 22 0 f0 s0 c333333
+rect 90 217 4 22 0 f0 s0 c333333
 

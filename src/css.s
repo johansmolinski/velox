@@ -112,6 +112,25 @@ CP_ROWGAP	rs.b	1
 CP_MAXHEIGHT	rs.b	1
 CP_TLAYOUT	rs.b	1
 CP_ORDER	rs.b	1
+CP_BORDERT	rs.b	1		; border-top .. -left (t r b l)
+CP_BORDERR	rs.b	1
+CP_BORDERB	rs.b	1
+CP_BORDERL	rs.b	1
+CP_BWIDTH	rs.b	1		; border-width, -style, -color
+CP_BSTYLE	rs.b	1
+CP_BCOLOR	rs.b	1
+CP_BTW		rs.b	1		; border-top-width .. (t r b l)
+CP_BRW		rs.b	1
+CP_BBW		rs.b	1
+CP_BLW		rs.b	1
+CP_BTS		rs.b	1		; border-top-style ..
+CP_BRS		rs.b	1
+CP_BBS		rs.b	1
+CP_BLS		rs.b	1
+CP_BTC		rs.b	1		; border-top-color ..
+CP_BRC		rs.b	1
+CP_BBC		rs.b	1
+CP_BLC		rs.b	1
 CP_COUNT	rs.b	0
 
 	section	code,code
@@ -1728,6 +1747,25 @@ PropNames:
 	PN	CP_MAXHEIGHT,"max-height"
 	PN	CP_TLAYOUT,"table-layout"
 	PN	CP_ORDER,"order"
+	PN	CP_BORDERT,"border-top"
+	PN	CP_BORDERR,"border-right"
+	PN	CP_BORDERB,"border-bottom"
+	PN	CP_BORDERL,"border-left"
+	PN	CP_BWIDTH,"border-width"
+	PN	CP_BSTYLE,"border-style"
+	PN	CP_BCOLOR,"border-color"
+	PN	CP_BTW,"border-top-width"
+	PN	CP_BRW,"border-right-width"
+	PN	CP_BBW,"border-bottom-width"
+	PN	CP_BLW,"border-left-width"
+	PN	CP_BTS,"border-top-style"
+	PN	CP_BRS,"border-right-style"
+	PN	CP_BBS,"border-bottom-style"
+	PN	CP_BLS,"border-left-style"
+	PN	CP_BTC,"border-top-color"
+	PN	CP_BRC,"border-right-color"
+	PN	CP_BBC,"border-bottom-color"
+	PN	CP_BLC,"border-left-color"
 	dc.b	0
 	even
 
@@ -2602,8 +2640,8 @@ CssApply:
 	; reset the per-element state of the "visually hidden" heuristic
 	clr.l	g_CssHidden(a4)
 	lea	g_CssBox(a4),a0
-	moveq	#8-1,d0
-.cb:	move.l	#-1,(a0)+		; margins/paddings: not set
+	moveq	#16-1,d0
+.cb:	move.l	#-1,(a0)+		; margins/paddings/borders: not set
 	dbf	d0,.cb
 	moveq	#0,d2			; pass 0: normal, 1: important
 .pass:	move.w	(a2),d3			; rules
@@ -2642,11 +2680,13 @@ CssApply:
 	movem.l	(sp)+,d2-d3/a2-a3/a5
 	rts
 
-; FinishBox - margins and paddings set by CSS into the style (a3):
-; each side becomes margin (or the UA margin) + padding; the paddings
-; alone also into st_Pad (an inline box's: layout.s InlineBox)
+; FinishBox - margins, paddings and borders set by CSS into the style
+; (a3): each side becomes margin (or the UA margin) + padding + border
+; width; the paddings alone also into st_Pad (an inline box's: layout.s
+; InlineBox), the border widths into st_BW (a border is drawn if its
+; style is a line: else no width)
 FinishBox:
-	movem.l	d2-d3/a2,-(sp)
+	movem.l	d2-d4/a2,-(sp)
 	lea	g_CssBox(a4),a0
 	lea	SideOffs(pc),a1
 	lea	st_Pad(a3),a2
@@ -2658,23 +2698,34 @@ FinishBox:
 .pp:	cmp.l	#255,d1
 	bls.s	.pb
 	move.l	#255,d1
-.pb:	move.b	d1,(a2)+
+.pb:	move.b	d1,(a2)
+	moveq	#0,d4			; d4 = border width: a line's
+	cmp.l	#1,48(a0)
+	bne.s	.bw
+	move.l	32(a0),d4
+	bpl.s	.bw
+	moveq	#3,d4			; (no width: medium)
+.bw:	move.b	d4,st_BW-st_Pad(a2)
+	addq.l	#1,a2
 	move.l	(a0),d0			; margin
 	move.l	16(a0),d1		; padding
 	cmp.l	#-1,d0
 	bne.s	.m
 	cmp.l	#-1,d1
+	bne.s	.ua
+	tst.l	d4
 	beq.s	.next
-	move.w	(a3,d2.w),d0		; keep the UA margin
+.ua:	move.w	(a3,d2.w),d0		; keep the UA margin
 	ext.l	d0
 .m:	tst.l	d1
 	bpl.s	.p
 	moveq	#0,d1
 .p:	add.l	d1,d0
+	add.l	d4,d0
 	move.w	d0,(a3,d2.w)
 .next:	addq.l	#4,a0
 	dbf	d3,.l
-	movem.l	(sp)+,d2-d3/a2
+	movem.l	(sp)+,d2-d4/a2
 	rts
 
 SideOffs:	dc.w	st_MTop,st_MRight,st_MBottom,st_MLeft
@@ -3273,6 +3324,14 @@ PropJump:
 	dc.w	PWidth-PropJump,PGap-PropJump,PColGap-PropJump
 	dc.w	PRowGap-PropJump,PMaxHeight-PropJump,PTLayout-PropJump
 	dc.w	POrder-PropJump
+	dc.w	PBSide-PropJump,PBSide-PropJump,PBSide-PropJump,PBSide-PropJump
+	dc.w	PBWidth-PropJump,PBStyle-PropJump,PBColor-PropJump
+	dc.w	PBSideW-PropJump,PBSideW-PropJump,PBSideW-PropJump
+	dc.w	PBSideW-PropJump
+	dc.w	PBSideS-PropJump,PBSideS-PropJump,PBSideS-PropJump
+	dc.w	PBSideS-PropJump
+	dc.w	PBColor-PropJump,PBColor-PropJump,PBColor-PropJump
+	dc.w	PBColor-PropJump
 	IFNE	(*-PropJump)-2*CP_COUNT
 	FAIL	"PropJump: one entry per CP_xxx"
 	ENDC
@@ -3673,10 +3732,245 @@ DisplayKw:
 	dc.b	$ff
 	even
 
+; BorderSides - a border shorthand (a2: width, style, colour) for the
+; sides in d1 (bits 0-3: t r b l): their widths and styles (g_CssBox,
+; FinishBox), the colour (st_Edge: one for all; -1 the text's)
+BorderSides:
+	movem.l	d3-d6/a2,-(sp)
+	move.l	d1,d6			; d6 = sides
+	moveq	#-1,d3			; d3 = width, d4 = style, d5 = colour
+	moveq	#-1,d4
+	moveq	#-1,d5
+.l:	move.l	a2,a0
+	bsr	SkipWs
+	move.l	a0,a2
+	tst.b	(a2)
+	beq.s	.set
+	bsr	BStyleTok
+	bmi.s	.ns
+	move.l	d0,d4
+	bra.s	.next
+.ns:	move.l	a2,a0
+	bsr	BWidthTok
+	bmi.s	.nc
+	move.l	d0,d3
+	bra.s	.next
+.nc:	move.l	a2,a0
+	jsr	ParseColor
+	tst.l	d0
+	bmi.s	.next
+	move.l	d0,d5
+.next:	bsr	NextWord
+	bra.s	.l
+.set:	tst.l	d3			; no width: medium
+	bpl.s	.w
+	moveq	#3,d3
+.w:	tst.l	d4			; no style: none
+	bpl.s	.s
+	moveq	#0,d4
+.s:	move.l	d5,st_Edge(a3)
+	lea	g_CssBox+32(a4),a0
+	moveq	#0,d0
+.side:	btst	d0,d6
+	beq.s	.sn
+	move.l	d3,(a0,d0.w*4)
+	move.l	d4,16(a0,d0.w*4)
+.sn:	addq.w	#1,d0
+	cmp.w	#4,d0
+	blo.s	.side
+	movem.l	(sp)+,d3-d6/a2
+	rts
+
+; PBSide - border-top .. border-left
+PBSide:	moveq	#0,d0
+	move.w	d2,d0
+	sub.w	#CP_BORDERT,d0
+	moveq	#0,d1
+	bset	d0,d1
+	bra	BorderSides
+
+; PBWidth, PBStyle - border-width, border-style: 1 to 4 values
+PBWidth:
+	lea	g_CssBox+32(a4),a0
+	lea	BWidthTok(pc),a1
+	bra.s	FourVals
+PBStyle:
+	lea	g_CssBox+48(a4),a0
+	lea	BStyleTok(pc),a1
+
+; FourVals - 1 to 4 words of a2 (t, r, b, l as CSS spreads them), each
+; read by a1 (In: a2 = the word; Out: d0, negative if not one), into
+; the longs at a0
+FourVals:
+	movem.l	d2-d3/a2/a5,-(sp)
+	move.l	a0,a5
+	move.l	a1,d3			; d3 = the reader
+	lea	-16(sp),sp
+	moveq	#0,d2			; d2 = values
+.l:	move.l	a2,a0
+	bsr	SkipWs
+	move.l	a0,a2
+	tst.b	(a2)
+	beq.s	.e
+	cmp.w	#4,d2
+	bhs.s	.e
+	move.l	d3,a1
+	jsr	(a1)
+	tst.l	d0
+	bmi.s	.nx
+	move.l	d0,(sp,d2.w*4)
+	addq.w	#1,d2
+.nx:	bsr	NextWord
+	bra.s	.l
+.e:	tst.w	d2
+	beq.s	.x
+	move.l	(sp),d0			; top
+	move.l	d0,(a5)
+	move.l	d0,d1			; right: the 2nd, else the 1st
+	cmp.w	#2,d2
+	blo.s	.r
+	move.l	4(sp),d1
+.r:	move.l	d1,4(a5)
+	move.l	d1,12(a5)		; left: the 4th, else as right
+	cmp.w	#4,d2
+	blo.s	.b
+	move.l	12(sp),12(a5)
+.b:	cmp.w	#3,d2			; bottom: the 3rd, else the 1st
+	blo.s	.b1
+	move.l	8(sp),d0
+.b1:	move.l	d0,8(a5)
+.x:	lea	16(sp),sp
+	movem.l	(sp)+,d2-d3/a2/a5
+	rts
+
+; PBSideW, PBSideS - border-top-width .., border-top-style ..
+PBSideW:
+	bsr	BWidthTok
+	bmi.s	.x
+	moveq	#0,d1
+	move.w	d2,d1
+	sub.w	#CP_BTW,d1
+	lea	g_CssBox+32(a4),a0
+	move.l	d0,(a0,d1.w*4)
+.x:	rts
+PBSideS:
+	bsr	BStyleTok
+	bmi.s	.x
+	moveq	#0,d1
+	move.w	d2,d1
+	sub.w	#CP_BTS,d1
+	lea	g_CssBox+48(a4),a0
+	move.l	d0,(a0,d1.w*4)
+.x:	rts
+
+; PBColor - border-color (its first colour), border-top-color ..: the
+; one colour of the borders
+PBColor:
+	move.l	a2,a0
+	bsr	SkipWs
+	jsr	ParseColor
+	tst.l	d0
+	bmi.s	.x
+	move.l	d0,st_Edge(a3)
+.x:	rts
+
+; BWidthTok - a border width at a2 (thin, medium, thick, a length):
+; Out: d0 = px (0 - 255), or -1 (CCR set)
+BWidthTok:
+	move.l	a2,a0
+	lea	KwThin(pc),a1
+	bsr	Kw
+	bne.s	.thin
+	move.l	a2,a0
+	lea	KwMedium(pc),a1
+	bsr	Kw
+	bne.s	.med
+	move.l	a2,a0
+	lea	KwThick(pc),a1
+	bsr	Kw
+	bne.s	.thick
+	move.b	(a2),d0
+	cmp.b	#'.',d0
+	beq.s	.len
+	sub.b	#'0',d0
+	cmp.b	#9,d0
+	bhi.s	.no
+.len:	move.l	a2,a0
+	moveq	#CSS_EM,d0
+	jsr	ParseLength
+	tst.l	d1
+	bne.s	.no			; (percent: none)
+	cmp.l	#255,d0
+	bls.s	.x
+	move.l	#255,d0
+	bra.s	.x
+.thin:	moveq	#1,d0
+	bra.s	.x
+.med:	moveq	#3,d0
+	bra.s	.x
+.thick:	moveq	#5,d0
+	bra.s	.x
+.no:	moveq	#-1,d0
+.x:	tst.l	d0
+	rts
+
+; BStyleTok - a border style at a2: Out: d0 = 0 none/hidden, 1 a line,
+; -1 not a style (CCR set)
+BStyleTok:
+	lea	BStyleKw(pc),a1
+.l:	move.b	(a1)+,d0		; value, $ff = end
+	cmp.b	#$ff,d0
+	beq.s	.no
+	move.l	a2,a0
+	movem.l	d0/a1,-(sp)
+	bsr	Kw
+	movem.l	(sp)+,d0/a1
+	bne.s	.got
+.s:	tst.b	(a1)+
+	bne.s	.s
+	bra.s	.l
+.got:	ext.w	d0
+	ext.l	d0
+	tst.l	d0
+	rts
+.no:	moveq	#-1,d0
+	rts
+
+BStyleKw:
+	dc.b	0,"none",0,0,"hidden",0,1,"solid",0,1,"dashed",0
+	dc.b	1,"dotted",0,1,"double",0,1,"groove",0,1,"ridge",0
+	dc.b	1,"inset",0,1,"outset",0,$ff
+KwThin:		dc.b	"thin",0
+KwMedium:	dc.b	"medium",0
+KwThick:	dc.b	"thick",0
+	even
+
+; NextWord - a2 past its word (and parentheses in it)
+NextWord:
+	moveq	#0,d1
+.w:	move.b	(a2),d0
+	beq.s	.x
+	addq.l	#1,a2
+	cmp.b	#'(',d0
+	bne.s	.w1
+	addq.w	#1,d1
+.w1:	cmp.b	#')',d0
+	bne.s	.w2
+	subq.w	#1,d1
+.w2:	tst.w	d1
+	bne.s	.w
+	cmp.b	#' ',d0
+	bhi.s	.w
+.x:	rts
+
 ; PEdge - border, box-shadow: their colour (st_Edge, st_Shadow) is an
 ; inline box's outline (none, hidden, a border of 0: none; a width
 ; without a colour: the text's)
-PEdge:	move.l	a5,-(sp)
+PEdge:	cmp.w	#CP_BORDER,d2		; border: all four sides
+	bne.s	.sh
+	moveq	#15,d1
+	bra	BorderSides
+.sh:	move.l	a5,-(sp)
 	lea	st_Edge(a3),a5
 	cmp.w	#CP_BORDER,d2
 	beq.s	.b
@@ -4315,6 +4609,10 @@ PHeight:
 .css:	move.l	a2,a0
 	moveq	#CSS_EM,d0
 	jsr	ParseLength
+	movem.l	d0-d1,-(sp)
+	bsr	WidthValue		; (as st_Width: a block's, for a
+	move.w	d0,st_Height(a3)	;  table, LayoutTable)
+	movem.l	(sp)+,d0-d1
 	tst.l	d1
 	bne.s	.x
 	cmp.l	#1,d0

@@ -492,17 +492,20 @@ CreateGadgets:
 	move.b	wd_BorderTop(a3),d3
 	addq.l	#2,d3			; d3 = y of the toolbar
 	; page area and status line (and the tab strip between them and
-	; the toolbar, with two tabs or more)
+	; the toolbar: room for the text and the pages' icons)
 	move.l	d3,d0
 	add.l	d6,d0
 	addq.l	#3,d0
 	move.l	d0,g_StripY(a4)
 	clr.l	g_StripH(a4)
-	cmp.l	#2,g_TabN(a4)
+	cmp.l	#1,g_TabN(a4)
 	blo.s	.nstrip
 	move.l	d5,d1
 	addq.l	#4,d1
-	move.l	d1,g_StripH(a4)
+	cmp.l	#STRIP_MINH,d1
+	bhs.s	.sh
+	moveq	#STRIP_MINH,d1
+.sh:	move.l	d1,g_StripH(a4)
 	add.l	d1,d0
 	addq.l	#2,d0
 .nstrip:
@@ -3137,8 +3140,8 @@ FieldAt:
 	rts
 
 ;--------------------------------------------------------------------
-; The tab strip, between the toolbar and the page (two tabs or more):
-; each tab's title (a mark before it while it loads), the shown one
+; The tab strip, between the toolbar and the page: each tab's title (a
+; mark before it while it loads, its page's icon), the shown one
 ; white, a close box at the right end of each, then "+" for a new one.
 ; A click shows a tab (or closes it, on its box), the middle button
 ; closes it.
@@ -3147,6 +3150,7 @@ STRIP_TABW	equ	160		; a tab's width at most
 STRIP_PLUS	equ	20		; the "+" box
 STRIP_XMIN	equ	48		; a tab this wide has a close box
 STRIP_XW	equ	12		; ... this wide, at its right end
+STRIP_MINH	equ	20		; its height at least (the icons: 16)
 
 ; StripGeom - Out: d0 = the strip's left x, d1 = a tab's width
 StripGeom:
@@ -3164,7 +3168,7 @@ StripGeom:
 ; tabs or more, gone if not (the page area changes), else painted
 GuiStripSync:
 	moveq	#0,d0
-	cmp.l	#2,g_TabN(a4)
+	cmp.l	#1,g_TabN(a4)
 	blo.s	.w
 	moveq	#1,d0
 .w:	tst.l	g_StripH(a4)
@@ -3179,7 +3183,7 @@ GuiStripSync:
 GuiTabShown:
 	movem.l	d2,-(sp)
 	moveq	#0,d0			; the strip (it may come or go)
-	cmp.l	#2,g_TabN(a4)
+	cmp.l	#1,g_TabN(a4)
 	blo.s	.w
 	moveq	#1,d0
 .w:	tst.l	g_StripH(a4)
@@ -3228,10 +3232,18 @@ GuiTabShown:
 	lea	LogStripW(pc),a0
 	suba.l	a1,a1
 	jsr	LogEvent
+	move.l	g_Window(a4),a0		; (and its y on the screen)
+	moveq	#0,d0
+	move.w	wd_TopEdge(a0),d0
+	add.l	g_StripY(a4),d0
+	lea	LogStripY(pc),a0
+	suba.l	a1,a1
+	jsr	LogEvent
 .ns:	movem.l	(sp)+,d2
 	rts
 
 LogStripW:	dc.b	"stripw",0
+LogStripY:	dc.b	"stripy",0
 	even
 
 ; StripStale - (event loop) the strip painted again if a tab's title or
@@ -3251,6 +3263,9 @@ StripStale:
 	move.l	d2,d0
 	jsr	TabRec
 	cmp.l	tb_DrawnBusy(a0),d1
+	bne.s	.paint
+	move.l	tb_Fav(a0),d1		; (its icon came or went)
+	cmp.l	tb_DrawnFav(a0),d1
 	bne.s	.paint
 	move.l	d2,d0
 	jsr	TabCaption
@@ -3428,7 +3443,22 @@ PaintStrip:
 	bsr	FillBox
 	movem.l	(sp)+,d2-d5
 	addq.l	#6,d6
-.nb:	move.l	d7,d0			; its title, as it fits
+.nb:	move.l	tb_Fav(a2),d0		; its page's icon (if there is room)
+	move.l	d0,tb_DrawnFav(a2)
+	beq.s	.nfav
+	move.l	d0,a0
+	moveq	#0,d0
+	move.w	im_W(a0),d0
+	add.l	d6,d0
+	add.l	#STRIP_XW+4,d0
+	cmp.l	d4,d0
+	bhi.s	.nfav
+	bsr	StripIcon
+	moveq	#0,d0
+	move.w	im_W(a0),d0
+	add.l	d0,d6
+	addq.l	#3,d6
+.nfav:	move.l	d7,d0			; its title, as it fits
 	jsr	TabCaption
 	move.l	a0,-(sp)
 	lea	tb_Drawn(a2),a1		; (what is shown: StripStale)
@@ -3465,11 +3495,7 @@ PaintStrip:
 	move.l	d0,-(sp)
 	move.l	a3,a1
 	move.l	d6,d0
-	move.l	g_ScreenFont(a4),a0
-	moveq	#0,d1
-	move.w	tf_Baseline(a0),d1
-	add.l	g_StripY(a4),d1
-	addq.l	#2,d1
+	bsr	StripBase
 	GFX	Move
 	move.l	(sp)+,d0
 	move.l	a3,a1
@@ -3495,11 +3521,7 @@ PaintStrip:
 	move.l	a3,a1
 	move.l	d2,d0
 	addq.l	#6,d0
-	move.l	g_ScreenFont(a4),a0
-	moveq	#0,d1
-	move.w	tf_Baseline(a0),d1
-	add.l	g_StripY(a4),d1
-	addq.l	#2,d1
+	bsr	StripBase
 	GFX	Move
 	move.l	a3,a1
 	lea	StrPlus(pc),a0
@@ -3510,6 +3532,47 @@ PaintStrip:
 
 StrPlus:	dc.b	"+",0
 	even
+
+; StripBase - (PaintStrip) Out: d1 = the y of the strip's text baseline
+; (the text in the middle) (d0/a1 kept)
+StripBase:
+	move.l	g_ScreenFont(a4),a0
+	move.l	g_StripH(a4),d1
+	sub.w	tf_YSize(a0),d1
+	asr.l	#1,d1
+	add.w	tf_Baseline(a0),d1
+	add.l	g_StripY(a4),d1
+	rts
+
+; StripIcon - (PaintStrip, a3 = RastPort) ImageInfo a0 at x d6, in the
+; middle of the strip (a0 kept)
+StripIcon:
+	movem.l	d2-d6/a0/a2,-(sp)
+	move.l	d6,d2			; destination x, y
+	move.l	g_StripH(a4),d3
+	moveq	#0,d0
+	move.w	im_H(a0),d0
+	sub.l	d0,d3
+	asr.l	#1,d3
+	add.l	g_StripY(a4),d3
+	moveq	#0,d4			; its size
+	move.w	im_W(a0),d4
+	moveq	#0,d5
+	move.w	im_H(a0),d5
+	move.l	im_Mask(a0),a2
+	move.l	im_BitMap(a0),a0
+	moveq	#0,d0
+	moveq	#0,d1
+	move.l	a3,a1
+	move.l	a2,d6
+	bne.s	.m
+	move.l	#$c0,d6
+	GFX	BltBitMapRastPort
+	bra.s	.x
+.m:	move.l	#$e0,d6
+	GFX	BltMaskBitMapRastPort
+.x:	movem.l	(sp)+,d2-d6/a0/a2
+	rts
 
 ; StripX - (PaintStrip, a3 = RastPort) the close box of the tab whose
 ; box ends at x d4: a cross

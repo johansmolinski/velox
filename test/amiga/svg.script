@@ -1,0 +1,7 @@
+; svg: SVG images (svg.s) in a page, at their own size, by width= and
+; by CSS
+Echo >VELOX:r/svg.txt "svg"
+Echo >VELOX:r/svg.start ""
+VELOX:velox http://127.0.0.1:8080/svg.html LOG=VELOX:r/svg.log
+Echo >>VELOX:r/svg.txt "exit rc=$RC"
+Echo >>VELOX:r/svg.txt "done"

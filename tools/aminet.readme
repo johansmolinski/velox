@@ -20,8 +20,8 @@ Features
   borders, widths, alignment, floats, media queries
 - Tables, lists, forms (GET and POST), frames (each scrolling on its
   own), image maps, background images
-- Images decoded by Velox itself: JPEG (also progressive), PNG, GIF and
-  WebP, dithered to the screen's colours; other formats through the
+- Images decoded by Velox itself: JPEG (also progressive), PNG, GIF,
+  WebP and SVG, dithered to the screen's colours; other formats through the
   picture datatypes
 - Tabs, each loading on its own, all at once
 - http and https (AmiSSL 6, with certificate checks), keep-alive,

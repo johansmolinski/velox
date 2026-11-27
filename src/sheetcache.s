@@ -20,7 +20,7 @@
 
 	include	"velox.i"
 
-	xdef	SheetFind,SheetLoad,SheetSave,SheetEnv,SheetFlush
+	xdef	SheetFind,SheetLoad,SheetSave,SheetEnv,SheetFlush,Hex8
 	xref	Alloc,Free,PageAlloc,BufAppend,BufFree,StrLen,DcHash
 	xref	AttrNames,AttrNamesEnd,InsertRule,VarInsert,RootElem
 	xref	DcLoadImg,DcStoreImg,DcImgFree

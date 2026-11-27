@@ -957,7 +957,10 @@ PfNode:
 	beq.s	.at			; state
 	lea	n_Data2(a2),a0
 	cmp.w	#TAG_IMG,n_Tag(a2)
+	beq.s	.zap
+	cmp.w	#TAG_SVG,n_Tag(a2)
 	bne.s	.fs
+.zap:
 	bsr	PfZap
 	bra.s	.at
 .fs:	bsr	PfFix

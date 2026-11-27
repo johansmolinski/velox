@@ -190,7 +190,8 @@ try:
     px = int([l for l in ls if l.startswith("pagex ")][-1].split()[1])
     py = int([l for l in ls if l.startswith("pagey ")][-1].split()[1])
     tw = int([l for l in ls if l.startswith("stripw ")][-1].split()[1])
-    sx, sy = px + 3 * tw - 9, py + 6
+    ty = int([l for l in ls if l.startswith("stripy ")][-1].split()[1])
+    sx, sy = px + 3 * tw - 9, ty + 6
     n = len(lines())
     with open(os.path.join(r, "tabs.go1"), "w") as f:
         f.write("VELOX:mouse %d %d\nWait 1\nVELOX:mouse %d %d DOWN\n"

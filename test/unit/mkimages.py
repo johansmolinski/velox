@@ -151,6 +151,91 @@ webpenc.encode(wy, os.path.join(d, "wy-simple.webp"), 0, 60)
 webpenc.encode(picture(320, 240), os.path.join(d, "wy-simbig.webp"), 0, 100, 4, 40)
 webpenc.encode(wy, os.path.join(d, "wy-sharp.webp"), 1, 100, 7, 30)
 
+# ICO (favicons): BMP images of 32 (with alpha), 24, 8, 4 and 1 bits a
+# pixel with their AND masks, odd sizes (rows padded), several sizes in
+# one file (the largest is PIL's and Velox's natural one), PNGs inside
+import struct  # noqa: E402
+
+
+def dib(im, bpp):
+    """A BMP image for an ICO file: header, palette, pixels, AND mask."""
+    w, h = im.size
+    rgba = im.convert("RGBA")
+    px = rgba.load()
+    pal = []
+    if bpp <= 8:
+        q = rgba.convert("RGB").quantize(1 << bpp)
+        pal = q.getpalette()[:3 * (1 << bpp)]
+        pal += [0] * (3 * (1 << bpp) - len(pal))
+        qp = q.load()
+    rows = []
+    for y in range(h - 1, -1, -1):
+        bits = []
+        row = bytearray()
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if bpp == 32:
+                row += bytes((b, g, r, a))
+            elif bpp == 24:
+                row += bytes((b, g, r))
+            else:
+                bits.append(qp[x, y])
+        if bpp <= 8:
+            acc, n = 0, 0
+            for v in bits:
+                acc = acc << bpp | v
+                n += bpp
+                if n == 8:
+                    row.append(acc)
+                    acc, n = 0, 0
+            if n:
+                row.append(acc << (8 - n))
+        row += bytes(-len(row) % 4)
+        rows.append(bytes(row))
+    mask = []
+    for y in range(h - 1, -1, -1):
+        row = bytearray((w + 7) // 8)
+        for x in range(w):
+            if px[x, y][3] < 128:
+                row[x // 8] |= 0x80 >> (x % 8)
+        row += bytes(-len(row) % 4)
+        mask.append(bytes(row))
+    ncol = (1 << bpp) if bpp <= 8 else 0
+    hdr = struct.pack("<IiiHHIIiiII", 40, w, h * 2, 1, bpp, 0, 0, 0, 0, ncol, 0)
+    palb = b"".join(bytes((pal[3 * i + 2], pal[3 * i + 1], pal[3 * i], 0)) for i in range(ncol))
+    return hdr + palb + b"".join(rows) + b"".join(mask)
+
+
+def ico(name, images):
+    """images: (width, height, bpp, data)"""
+    out = struct.pack("<HHH", 0, 1, len(images))
+    off = 6 + 16 * len(images)
+    for w, h, bpp, data in images:
+        out += struct.pack("<BBBBHHII", w % 256, h % 256, (1 << bpp) % 256 if bpp <= 8 else 0, 0, 1, bpp, len(data), off)
+        off += len(data)
+    open(os.path.join(d, name), "wb").write(out + b"".join(i[3] for i in images))
+
+
+def icon(w, h, alpha):
+    im = picture(w, h, alpha=alpha)
+    if not alpha:
+        # a round icon: the corners transparent (the AND mask)
+        px = im.load()
+        for y in range(h):
+            for x in range(w):
+                if (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2 > w * w:
+                    px[x, y] = (0, 0, 0, 0)
+    return im
+
+
+i32 = icon(24, 24, True)
+ico("i32.ico", [(16, 16, 32, dib(icon(16, 16, True), 32)), (24, 24, 32, dib(i32, 32))])
+ico("i24.ico", [(19, 19, 24, dib(icon(19, 19, False), 24))])
+ico("i8.ico", [(20, 20, 8, dib(icon(20, 20, False), 8))])
+ico("i4.ico", [(13, 11, 4, dib(icon(13, 11, False), 4))])
+ico("i1.ico", [(17, 11, 1, dib(icon(17, 11, False), 1))])
+save(picture(48, 48, alpha=True), "ipng.ico", sizes=[(16, 16), (32, 32), (48, 48)])
+
 # broken files: cut short, and with bytes overwritten; decoding them
 # must not crash (their output is not compared: ".bad")
 random.seed(11)

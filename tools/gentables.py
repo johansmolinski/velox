@@ -48,7 +48,7 @@ TAGS = [
     ("pre", [C, P]), ("progress", []), ("q", []), ("s", []), ("samp", []),
     ("script", [R]), ("section", [C]), ("select", [N]), ("small", []),
     ("source", [V]), ("span", []), ("strike", []), ("strong", []), ("style", [R]),
-    ("sub", []), ("summary", [C]), ("sup", []), ("svg", []),
+    ("sub", []), ("summary", [C]), ("sup", []), ("svg", [R]),
     ("table", [C, S, N, "TABLE"]), ("tbody", [N, "TBODY"]), ("td", [S]),
     ("template", [S]), ("textarea", [RC, P]), ("tfoot", [N, "TBODY"]), ("th", [S]),
     ("thead", [N, "TBODY"]), ("time", []), ("title", [RC]), ("tr", [N, "ROW"]),
@@ -58,7 +58,8 @@ TAGS = [
 
 # User agent style per tag: (display, font op, soft, margin class, flags)
 DISP = {"inline": 0, "block": 1, "listitem": 2, "none": 3, "table": 4,
-        "row": 5, "cell": 6, "iblock": 7, "rowgroup": 8, "caption": 9}
+        "row": 5, "cell": 6, "iblock": 7, "rowgroup": 8, "caption": 9,
+        "flex": 10}  # (flex: CSS only, flex.s)
 FONT = {"": 0, "mono": 1, "smaller": 2, "larger": 3, "h1": 4, "h2": 5, "h3": 6,
         "h4": 7, "h5": 8, "h6": 9}
 SOFT = {"": 0, "b": 2, "i": 4, "u": 1}  # graphics FSF_ bits
@@ -68,7 +69,7 @@ UA = {
     "html": ("block",), "body": ("block",), "head": ("none",), "title": ("none",),
     "meta": ("none",), "link": ("none",), "script": ("none",), "style": ("none",),
     "template": ("none",), "base": ("none",), "param": ("none",), "source": ("none",),
-    "track": ("none",), "area": ("none",), "noembed": ("none",), "svg": ("none",),
+    "track": ("none",), "area": ("none",), "noembed": ("none",), "svg": ("iblock",),
     "col": ("none",), "colgroup": ("none",), "option": ("none",), "optgroup": ("none",),
     "address": ("block", "", "i"), "article": ("block",), "aside": ("block",),
     "footer": ("block",), "header": ("block",), "main": ("block",), "nav": ("block",),

@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Host side of favicon.script: the first page's icon, then a second tab
+with a page without an icon link; screenshot, quit."""
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from xdrive import Amiga, wait_log  # noqa: E402
+
+r = sys.argv[1]
+log = os.path.join(r, "favicon.log")
+out = open(os.path.join(r, "favicon.driver"), "w")
+U = "http://127.0.0.1:8080/"
+try:
+    a = Amiga()
+    wait_log(log, "favicon ", timeout=120)
+    a.key("amiga+t")
+    wait_log(log, "tabnew ", timeout=30)
+    time.sleep(2)
+    a.key("ctrl+l")
+    a.key("amiga+x")
+    a.type(U + "favico.html")
+    a.key("Return")
+    lines = wait_log(log, "favicon ", count=2, timeout=120)
+    time.sleep(2)
+    a.shot(os.path.join(r, "favicon.png"))
+    # a page without an icon link: /favicon.ico asked for (none there)
+    a.key("ctrl+l")
+    a.key("amiga+x")
+    a.type(U + "favnone.html")
+    a.key("Return")
+    wait_log(log, "page " + U + "favnone.html", timeout=60)
+    time.sleep(4)
+    out.write("%s\n" % " ".join(l for l in lines if l.startswith("favicon")))
+    out.write("ok\n")
+except Exception as e:
+    out.write("FAIL %r\n" % e)
+Amiga().key("ctrl+q")

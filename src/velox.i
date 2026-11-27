@@ -547,6 +547,8 @@ tb_Title	rs.b	TAB_TITLE	; its title (while not in G)
 tb_Id		rs.l	1		; never the same twice (locks name it)
 tb_Drawn	rs.b	TAB_TITLE	; the title the tab strip shows
 tb_DrawnBusy	rs.l	1		; ... and if it shows it loading
+tb_Fav		rs.l	1		; its page's icon (ImageInfo) or 0
+tb_DrawnFav	rs.l	1		; ... the one the strip shows
 TB_SIZEOF	rs.b	0
 ; A save area begins with g_TabA .. g_TkEnd as they are in G: the
 ; scheduler reads any tab's loader state at x-g_TabA(area) (tabs.s).

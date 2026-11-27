@@ -1,0 +1,7 @@
+; favicon: the tabs' page icons, 16x16 in the strip: a PNG and an ICO
+; by <link rel=...icon>, else /favicon.ico
+Echo >VELOX:r/favicon.txt "favicon"
+Echo >VELOX:r/favicon.start ""
+VELOX:velox http://127.0.0.1:8080/fav.html LOG=VELOX:r/favicon.log
+Echo >>VELOX:r/favicon.txt "exit rc=$RC"
+Echo >>VELOX:r/favicon.txt "done"

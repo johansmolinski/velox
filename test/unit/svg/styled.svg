@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <style>
+      .bg { fill: #1e5aa8; }
+      .fg, .other { fill: #ffffff; stroke: none }
+      svg .ring { fill: none; stroke: #f0c000; stroke-width: 4px; }
+    </style>
+    <rect id="hidden" width="64" height="64" fill="red"/>
+  </defs>
+  <title>An icon</title>
+  <rect class="bg" width="64" height="64" rx="0"/>
+  <circle class="ring" cx="32" cy="32" r="24"/>
+  <path class="fg" d="M22 20 L46 32 L22 44 Z"/>
+  <rect x="2" y="2" width="8" height="8" style="fill: #00ff00; opacity: 0.999"/>
+  <rect x="54" y="54" width="8" height="8" display="none" fill="red"/>
+  <text x="10" y="60" fill="none">text is not drawn</text>
+</svg>

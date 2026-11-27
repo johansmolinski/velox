@@ -1,0 +1,14 @@
+#!/bin/sh
+# checks for svg.script: shapes.svg 120x90 at its own size and 60x45 by
+# width=; the 512x512 icon 24x24 by width= and height= and 300x300 at its
+# own size (no width: as the viewBox, 512, wider than the window: kept to
+# it); play.svg 32x32 by CSS; inline <svg>s 20x20 (width=) and 18x18
+# (CSS); data: URLs, a PNG 10x6 (base64) and an SVG 14x14 (%-encoded)
+d=$(dirname "$1"); fail=0
+cat "$d/svg.driver"
+for s in 120090 60045 24024 32032 20020 18018 10006 14014; do
+	grep -q "^imgsize $s\$" "$d/svg.log" || { echo "no image $s"; fail=1; }
+done
+grep -q '^ok$' "$d/svg.driver" || fail=1
+grep -q '^exit rc=0' "$1" || { echo "velox exit code: $(grep exit "$1")"; fail=1; }
+exit $fail

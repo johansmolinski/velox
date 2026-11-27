@@ -4665,6 +4665,7 @@ PHeight:
 	bsr	ImgLen
 	ble.s	.css			; (auto, percent: as its width=
 	move.w	d0,st_Height(a3)	;  and height= say)
+	rts				; (not scaled as a block's is)
 .css:	move.l	a2,a0
 	moveq	#CSS_EM,d0
 	jsr	ParseLength

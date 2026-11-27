@@ -1529,7 +1529,10 @@ LayoutReplaced:
 	move.l	a0,a5
 	move.l	a1,a3
 	cmp.w	#TAG_IMG,n_Tag(a5)
+	beq.s	.img
+	cmp.w	#TAG_SVG,n_Tag(a5)	; (an <svg> in the page: an image too)
 	bne.s	.notimg
+.img:
 	move.l	n_Data2(a5),d0		; loaded: its size
 	beq.s	.unl
 	move.l	d0,a0

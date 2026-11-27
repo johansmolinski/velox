@@ -184,7 +184,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 full = os.path.join(full, "index.html")
             if os.path.isfile(full) and os.path.realpath(full).startswith(os.path.realpath(DOCROOT)):
                 ctype = ("text/html; charset=utf-8" if full.endswith(".html") else
-                         "text/css" if full.endswith(".css") else "application/octet-stream")
+                         "text/css" if full.endswith(".css") else
+                         "image/svg+xml" if full.endswith(".svg") else "application/octet-stream")
                 hdrs = []
                 if p.endswith("?nostore"):  # (never kept: a forum's pages)
                     hdrs = [("Cache-Control", "no-store")]

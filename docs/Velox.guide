@@ -34,7 +34,7 @@ A small, fast web browser for AmigaOS 3.x, written in 68k assembly.
 
 @{b}Introduction@{ub}
 
-Velox is a web browser for classic Amigas: AmigaOS 3.1 or newer on a 68020 or better. All of it is written in 68k assembly, and it decodes JPEG, PNG, GIF and WebP images itself, so it needs no datatypes for them.
+Velox is a web browser for classic Amigas: AmigaOS 3.1 or newer on a 68020 or better. All of it is written in 68k assembly, and it decodes JPEG, PNG, GIF, WebP and SVG images itself, so it needs no datatypes for them.
 
 Velox stays responsive while it loads: the page scrolls and links, gadgets and menus work while pages and their images still come in. A page whose style sheets must still be fetched is shown plain as it comes, and laid out with them once they are there. Pages can load in several @{" tabs " link Tabs} at once.
 
@@ -52,7 +52,7 @@ It shows the web of today as far as an Amiga can: HTML with a tolerant parser, m
   - For https: AmiSSL 6, or velox-proxy.py running on another computer (see @{" https and the proxy " link Https})
   - Fast RAM: pages, their images and the pages kept for Back live there. With Chip RAM alone, as on a stock A1200, few pages fit. A few MB will do without https; with AmiSSL, 8 MB or more (AmiSSL alone takes about 4 MB)
 
-Nothing more is needed for images: Velox decodes JPEG, PNG, GIF and WebP itself. Other formats (ILBM, BMP...) go through the picture datatypes the system has.
+Nothing more is needed for images: Velox decodes JPEG, PNG, GIF and WebP and draws SVG itself. Other formats (ILBM, BMP...) go through the picture datatypes the system has.
 
 @endnode
 
@@ -126,7 +126,7 @@ At the top, the @{b}toolbar@{ub}: Back, Forward, Reload (it stops a page while i
 
 As you type, a list under the address field offers the pages you visited that match: those beginning with what you typed first (http://, https:// and www. do not count), then those that have it anywhere, the latest first. Down and Up choose one, Return goes there, and so does a click; Esc closes the list. Typing never waits for the list: it follows when there is time.
 
-With two tabs or more, the @{b}tab strip@{ub} lies below it: each tab's title, a small mark while it loads, a close box, and "+" for a new tab. See @{" Tabs " link Tabs}.
+The @{b}tab strip@{ub} lies below it: each tab's page icon (the site's favicon) and title, a small mark while it loads, a close box, and "+" for a new tab. See @{" Tabs " link Tabs}.
 
 The @{b}page@{ub} fills the rest, with its scroller at the right. A page of frames shows its frames side by side or stacked, each scrolling on its own, with a scrollbar of its own where it needs one.
 
@@ -264,7 +264,7 @@ Without AmiSSL, or to make https fast on a slow Amiga, run velox-proxy.py on a m
   - HTML with a tolerant parser; UTF-8, Latin-1 and Windows-1252 pages
   - CSS: selectors with specificity (also :not(), :is(), attributes, structural ones), colours (also rgb(), hsl() and calc() in them), custom properties with var(), flexbox (rows, columns, wrapping, grow, gaps, alignment, order), CSS tables (display: table and table-cell on any element), image sizes from CSS (width, height, max-width, max-height), borders (drawn solid, one colour per box), table heights, inline-block and inline-flex boxes, floated elements side by side, fonts, margins, padding, widths, alignment, display, floats, media queries, backgrounds; links styled as buttons look like buttons
   - Tables, lists, preformatted text, headings, rules
-  - Images: JPEG (also progressive), PNG (also with transparency), GIF and WebP (lossy and lossless) decoded by Velox, dithered to the screen's colours; other formats through datatypes; background images
+  - Images: JPEG (also progressive), PNG (also with transparency), GIF and WebP (lossy and lossless) decoded by Velox, SVG drawn by it, dithered to the screen's colours; other formats through datatypes; background images
   - Forms: text fields, passwords, check boxes, radio buttons, selects, text areas, files to send (chosen with a file requester); GET and POST (also multipart/form-data, for uploads)
   - Frames, each scrolling on its own; links into a frame load that frame only
   - Image maps, client and server side

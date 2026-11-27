@@ -3,7 +3,7 @@
 ;
 ; A decoder turns a file in memory into an ARGB image (g_PicW x g_PicH
 ; longs $AARRGGBB at g_PicData, alpha 255 = opaque).  The format is told
-; by the first bytes: GIF, PNG, JPEG, WebP.  Decoders run in the image
+; by the first bytes: GIF, PNG, JPEG, WebP, ICO; SVG by its "<svg" tag.  Decoders run in the image
 ; decoder process (img.s), so they use no Velox memory pools and no
 ; other state than their own: memory comes from AllocVec (PicAlloc).
 ; They must never read past the end of the data nor write past what
@@ -17,6 +17,7 @@
 	xref	ProfRead
 	ENDC
 	xref	GifInfo,GifDecode,PngInfo,PngDecode,JpegInfo,JpegDecode,WebpInfo,WebpDecode
+	xref	SvgIs,SvgInfo,SvgDecode,IcoIs,IcoInfo,IcoDecode
 
 	section	code,code
 
@@ -36,7 +37,7 @@ PicInfo:
 	jmp	(a1)
 .no:	moveq	#0,d1
 	rts
-.tab:	dc.l	GifInfo,PngInfo,JpegInfo,WebpInfo
+.tab:	dc.l	GifInfo,PngInfo,JpegInfo,WebpInfo,SvgInfo,IcoInfo
 
 ;--------------------------------------------------------------------
 ; PicDecode - decode an image file into g_PicW/g_PicH/g_PicData
@@ -66,7 +67,7 @@ PicDecode:
 .no:	moveq	#0,d0
 .x:	movem.l	(sp)+,d2/a2
 	rts
-.tab:	dc.l	GifDecode,PngDecode,JpegDecode,WebpDecode
+.tab:	dc.l	GifDecode,PngDecode,JpegDecode,WebpDecode,SvgDecode,IcoDecode
 
 NoInfo:	moveq	#0,d1
 NoDecode:
@@ -74,14 +75,16 @@ NoDecode:
 	rts
 
 ; PicFormat - In: a0 = data, d0 = length
-; Out: d0 = PF_GIF, PF_PNG, PF_JPEG, PF_WEBP or 0 (CCR set)
+; Out: d0 = PF_GIF, PF_PNG, PF_JPEG, PF_WEBP, PF_SVG, PF_ICO or 0 (CCR set)
 PF_GIF	equ	1
 PF_PNG	equ	2
 PF_JPEG	equ	3
 PF_WEBP	equ	4
+PF_SVG	equ	5
+PF_ICO	equ	6
 PicFormat:
 	cmp.l	#16,d0
-	blo.s	.no
+	blo.s	.svg
 	move.l	(a0),d1
 	cmp.l	#'GIF8',d1
 	beq.s	.gif
@@ -91,10 +94,20 @@ PicFormat:
 	cmp.w	#$ffd8,d1		; SOI
 	beq.s	.jpeg
 	cmp.l	#'RIFF',(a0)
-	bne.s	.no
+	bne.s	.svg
 	cmp.l	#'WEBP',8(a0)
-	bne.s	.no
+	bne.s	.svg
 	moveq	#PF_WEBP,d0
+	rts
+.svg:	move.l	d0,-(sp)		; (the length)
+	jsr	IcoIs
+	movem.l	(sp)+,d0
+	bne.s	.ico
+	jsr	SvgIs
+	beq.s	.no
+	moveq	#PF_SVG,d0
+	rts
+.ico:	moveq	#PF_ICO,d0
 	rts
 .gif:	moveq	#PF_GIF,d0
 	rts

@@ -38,7 +38,7 @@ import sys
 from PIL import Image
 im = Image.open(sys.argv[1]).convert("RGB")
 page = len(set(im.getpixel((x, y)) for x in range(140, 800, 2)
-               for y in range(115, 525, 2)))
+               for y in range(165, 525, 2)))
 bar = sum(1 for x in range(740, 832) for y in range(536, 560)
           if im.getpixel((x, y)) == (102, 136, 187))
 print(page, bar)

@@ -1570,7 +1570,10 @@ MeasureNode:
 	bsr	MeasBreak
 	bra	.pop
 .nbr:	cmp.w	#TAG_IMG,d1		; images as they will be laid out:
+	beq.s	.img
+	cmp.w	#TAG_SVG,d1
 	bne.s	.nimg
+.img:
 	move.l	n_Data2(a5),d0		; loaded: their size
 	beq.s	.iw
 	move.l	d0,a0

@@ -1,0 +1,13 @@
+# SVG images (svg.s): drawn at their own size and at others; the pixels
+# are compared with rsvg-convert's (test/unit/cmpsvg.py, the references
+# made by test/unit/mksvgref.sh)
+decode test/unit/svg/shapes.svg build/svg/shapes.0.argb => info 120x90 decoded 120x90
+decode test/unit/svg/shapes.svg build/svg/shapes.240.argb 240 => info 120x90 decoded 240x180
+decode test/unit/svg/paths.svg build/svg/paths.0.argb => info 100x100 decoded 100x100
+decode test/unit/svg/evenodd.svg build/svg/evenodd.0.argb => info 200x100 decoded 200x100
+decode test/unit/svg/transform.svg build/svg/transform.0.argb => info 100x100 decoded 100x100
+decode test/unit/svg/styled.svg build/svg/styled.0.argb => info 64x64 decoded 64x64
+decode test/unit/svg/styled.svg build/svg/styled.16.argb 16 => info 64x64 decoded 16x16
+decode test/unit/svg/icon.svg build/svg/icon.32.argb 32 => info 512x512 decoded 32x32
+decode test/unit/svg/icon.svg build/svg/icon.200.argb 200 => info 512x512 decoded 200x200
+decode test/unit/svg/gradient.svg build/svg/gradient.0.argb => info 80x40 decoded 80x40

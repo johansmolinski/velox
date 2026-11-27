@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 python3 test/unit/mkhttp.py build/http
 rm -rf build/img
 python3 test/unit/mkimages.py build/img
+rm -rf build/svg && mkdir -p build/svg
 fail=0
 for t in test/unit/*.vt; do
 	name=$(basename "$t" .vt)
@@ -29,5 +30,11 @@ if python3 test/unit/cmpimages.py build/img >build/pixels.out; then
 	echo "PASS pixels ($(grep -c PASS build/pixels.out) images)"
 else
 	grep -v '^PASS' build/pixels.out; echo "FAIL pixels"; fail=1
+fi
+# the SVG images drawn, against rsvg-convert
+if python3 test/unit/cmpsvg.py build/svg >build/svgpixels.out; then
+	echo "PASS svgpixels ($(grep -c PASS build/svgpixels.out) images)"
+else
+	grep -v '^PASS' build/svgpixels.out; echo "FAIL svgpixels"; fail=1
 fi
 exit $fail

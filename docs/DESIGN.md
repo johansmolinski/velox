@@ -491,6 +491,8 @@ JS is not on the roadmap yet, but it must stay possible to add. That means:
 | img.s       | loading images (also backgrounds), the decoder process, datatypes |
 | pic.s       | image formats, the decoded image (ARGB)                         |
 | gif.s png.s jpeg.s webp.s vp8.s vp8l.s inflate.s | the decoders     |
+| svg.s       | SVG images: drawn (filled, stroked) at the size shown            |
+| ico.s       | ICO images (favicons)                                           |
 | picbm.s     | decoded images to bitmaps: colour cube, dither, mask            |
 | gui.s       | window, gadgets, menus, painting, events                        |
 | find.s      | find in page                                                    |
@@ -506,7 +508,8 @@ Everything is tested on AmigaOS 3.1 and 3.2 (see CLAUDE.md).
 
 Velox decodes the web's formats itself, from the response in memory:
 GIF (gif.s), PNG (png.s with inflate.s), JPEG (jpeg.s: baseline and
-progressive) and WebP (webp.s, vp8.s lossy, vp8l.s lossless, alpha).
+progressive) and WebP (webp.s, vp8.s lossy, vp8l.s lossless, alpha),
+and it draws SVG (svg.s).
 The decoders write ARGB pixels (pic.s). They use no Velox state but
 their own and allocate with AllocVec, because they run in the image
 decoder process. They never read past their input or write past what
@@ -527,6 +530,30 @@ them cut and damaged files).
   exactly libwebp's pixels, and that PNG, GIF and lossless WebP come out
   exactly as PIL decodes them. JPEG is checked against libjpeg
   (`djpeg -nosmooth`) within a tolerance.
+- SVG is drawn at the width the page shows it, so it is sharp at any
+  size. svg.s reads the file as XML and draws paths (all commands,
+  arcs too), the basic shapes, groups with transforms, fills (non-zero,
+  even-odd) and strokes, with opacity; style comes from attributes,
+  `style=""` and the file's `<style>` class rules. Gradients are one
+  colour (their stops mixed); text, `<use>`, clipping, masks and
+  filters are not drawn. It is all fixed point: 16.16 for the user's
+  coordinates and transforms, 24.8 on the image; arcs and rotations
+  by CORDIC. A shape's edges are filled a pixel row at a time, four
+  samples a row, each span's horizontal coverage exact; strokes are a
+  quad a segment and an octagon at each joint. The headless tests
+  compare it with rsvg-convert (`test/unit/cmpsvg.py`).
+- Images in the page itself are images too: an inline `<svg>` is a raw
+  text element (its markup kept as it came) laid out like an `<img>`;
+  the loader gives the SVG decoder that markup (its attributes, and
+  `color=` from the element's text colour for `currentColor`), and a
+  `data:` URL's data (base64 or %-encoded). Their disk cache key is a
+  hash of that data ("inline:HASH").
+- A page's icon (favicon) is an `<img>` that the loader adds to the
+  `<head>` (img.s, FavAdd): the first `<link rel="icon">`, else
+  `/favicon.ico`, 16 pixels square. So it is fetched, decoded (ico.s:
+  ICO files, their BMP or PNG images) and kept in the disk cache at
+  that size like any image. The tab's record points to its ImageInfo
+  (`tb_Fav`) for the strip, until the page's images are freed.
 
 picbm.s turns the pixels into a bitmap like the screen's. It obtains a
 colour cube of pens once, with 2 to 6 levels by the screen depth, and

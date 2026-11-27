@@ -1,0 +1,12 @@
+#!/bin/sh
+# checks for favicon.script: two icons, 16x16, from favlink.png (a PNG
+# by <link rel="shortcut icon">) and favtest.ico (an ICO of BMPs, by
+# <link rel="icon">); without a link /favicon.ico is asked for
+d=$(dirname "$1"); fail=0
+cat "$d/favicon.driver"
+[ "$(grep -c '^favicon 16016$' "$d/favicon.log")" -ge 2 ] || { echo "not two 16x16 icons"; fail=1; }
+grep -q 'GET /favlink.png' "$d/../server.log" || { echo "favlink.png not asked for"; fail=1; }
+grep -q 'GET /favicon.ico' "$d/../server.log" || { echo "/favicon.ico not asked for"; fail=1; }
+grep -q '^ok$' "$d/favicon.driver" || fail=1
+grep -q '^exit rc=0' "$1" || { echo "velox exit code: $(grep exit "$1")"; fail=1; }
+exit $fail

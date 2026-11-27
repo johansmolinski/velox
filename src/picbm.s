@@ -56,7 +56,15 @@ PalInit:
 	move.l	d0,g_CgxBase(a4)
 	bne	.ready			; (without it: pens after all)
 	move.l	g_PalDepth(a4),d0
-.pens:	cmp.l	#8,d0
+.pens:	move.l	d0,-(sp)		; a native screen: bitmaps of their
+	move.l	g_PalFriend(a4),a0	; own, not like its (interleaved, or
+	moveq	#BMA_FLAGS,d1		; rows aligned for AGA): a mask's rows
+	GFX	GetBitMapAttr		; must be those of the bitmap's planes
+	and.l	#BMF_STANDARD,d0	; (BltMaskBitMapRastPort)
+	beq.s	.fr
+	clr.l	g_PalFriend(a4)
+.fr:	movem.l	(sp)+,d0
+	cmp.l	#8,d0
 	bls.s	.d
 	moveq	#8,d0
 .d:	moveq	#0,d7

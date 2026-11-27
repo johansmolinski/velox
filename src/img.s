@@ -45,6 +45,8 @@ bmh_Height		equ	2
 	xref	GuiProgSet,GuiBgCame
 	xref	G,BusyEvents,PicInfo,PicDecode,PicFree,PalInit,PicToBitMap,PicAlloc,BufAppend,BufClear,GuiStatus,GuiRelayout,GuiRefresh,GuiPageWidth,GuiPaintImage
 	xref	FmtDec,StrCopy,LogEvent,ImgNetHook
+	xref	Hex8,StrIPrefix,BufAppendStr,BufAppendByte,DomNewNode,DomAddAttr
+	xref	AtSrc,AtWidth,AtHeight,TabRec,DomAppend
 
 MAX_IMAGES	equ	32767		; <img>s a page (PfWalk counts with dbf)
 MAX_IMAGE	equ	2*1024*1024	; bytes of an image file for a datatype
@@ -71,6 +73,7 @@ ImagesStart:
 	bne.s	.x
 	move.l	g_Doc(a4),d0
 	beq.s	.x
+	bsr	FavAdd			; (the page's icon: an image too)
 	suba.l	a2,a2			; count them,
 	bsr.s	ImgWalk
 	move.l	g_ImgCount(a4),d0
@@ -82,12 +85,13 @@ ImagesStart:
 	beq.s	.x
 	move.l	d0,a2			; then queue them
 	bsr.s	ImgWalk
-.x:	movem.l	(sp)+,d2/a2-a3/a5
+.x:	bsr	FavSync
+	movem.l	(sp)+,d2/a2-a3/a5
 	rts
 
-; ImgWalk - the <img> elements of the page with a src to load (not a
-; data: URL), in document order: g_ImgCount of them, each put in the
-; queue at a2 (none if a2 = 0)
+; ImgWalk - the <img> elements of the page with a src to load (data:
+; URLs too) and the <svg>s, in document order: g_ImgCount of them, each
+; put in the queue at a2 (none if a2 = 0)
 ImgWalk:
 	move.l	g_Doc(a4),a5
 	move.l	n_First(a5),a3
@@ -95,19 +99,14 @@ ImgWalk:
 	beq.s	.x
 	cmp.b	#DN_ELEMENT,n_Type(a3)
 	bne.s	.next
+	cmp.w	#TAG_SVG,n_Tag(a3)	; (its content: not walked)
+	beq.s	.q
 	cmp.w	#TAG_IMG,n_Tag(a3)
 	bne.s	.down
 	move.l	a3,a0
 	lea	AnSrc(pc),a1
 	jsr	DomGetAttr
 	tst.l	d0
-	beq.s	.next
-	move.l	d0,a0			; data: URLs are not loaded
-	cmp.b	#'d',(a0)
-	bne.s	.q
-	cmp.b	#'a',1(a0)
-	bne.s	.q
-	cmp.b	#':',4(a0)
 	beq.s	.next
 .q:	move.l	g_ImgCount(a4),d0
 	cmp.l	#MAX_IMAGES,d0
@@ -559,6 +558,8 @@ ImagesStep:
 	bsr	ShareImage
 	tst.l	g_ImgNoCheck(a4)	; Back/Forward: as it is
 	bne	.done
+	bsr	InlineIs		; (<svg>, data: URL: nothing to ask)
+	bne	.done
 	jsr	DcFresh			; fresh: nothing to ask
 	bne	.done
 	bset	#NF_IMGCHECK,n_Flags(a5)	; (checked in pass 2)
@@ -618,6 +619,11 @@ ImagesStep:
 	bra.s	.got
 .fetch:	; fetch (window events and Ctrl-C can stop it)
 	bset	#NF_IMGFAIL,n_Flags(a5)	; (until it is there)
+	bsr	InlineBody		; (<svg>, data: URL: there already)
+	beq.s	.net
+	move.l	#200,d0
+	bra	.got
+.net:
 	move.l	g_WinSigMask(a4),d0
 	or.l	#SIGBREAKF_CTRL_C,d0
 	move.l	d0,g_AbortMask(a4)
@@ -712,7 +718,8 @@ ImagesStep:
 	jsr	GuiPaintImage
 	bra.s	.end
 .ref:	jsr	GuiRefresh
-.end:	move.l	g_ImgNext(a4),d0
+.end:	bsr	FavSync			; (the page's icon came?)
+	move.l	g_ImgNext(a4),d0
 	cmp.l	g_ImgCount(a4),d0
 	blo.s	.x
 	cmp.l	#2,g_ImgPass(a4)	; (all done: after pass 2)
@@ -732,6 +739,8 @@ ImagesStep:
 ; memory once, and all shown at once
 ShareImage:
 	movem.l	d2-d4/a2-a3,-(sp)
+	cmp.w	#TAG_SVG,n_Tag(a5)	; (<svg>s: no src to tell them apart)
+	beq.s	.x
 	move.l	n_Data2(a5),a3		; a3 = the ImageInfo
 	bsr	ImgBox
 	move.l	d0,d3			; d3/d4 = its size and maxima
@@ -1043,7 +1052,25 @@ ImagesQuit:
 ;--------------------------------------------------------------------
 ImgUrlKey:
 	move.l	a2,-(sp)
-	move.l	a5,a0
+	bsr	InlineBody		; <svg>, data: URL: "inline:HASH"
+	beq.s	.url
+	move.l	g_Resp+r_Body+buf_Data(a4),a0
+	move.l	g_Resp+r_Body+buf_Len(a4),d0
+	jsr	DcHash
+	move.l	d0,-(sp)
+	lea	g_Resp+r_Body(a4),a0
+	jsr	BufFree
+	lea	SInline(pc),a0
+	lea	g_ImgUrl(a4),a1
+	jsr	StrCopy
+	move.l	a1,a0
+	move.l	(sp)+,d0
+	jsr	Hex8
+	clr.b	(a0)
+	bsr	ImgKey
+	moveq	#1,d0
+	bra.s	.x
+.url:	move.l	a5,a0
 	lea	AnSrc(pc),a1
 	jsr	DomGetAttr
 	tst.l	d0
@@ -1727,6 +1754,7 @@ ImgListFree:
 	GFX	WaitBlit
 .l:	move.l	a2,d0
 	beq.s	.x
+	bsr	FavForget
 	move.l	im_BitMap(a2),a0
 	GFX	FreeBitMap
 	move.l	im_Mask(a2),d0
@@ -1815,3 +1843,427 @@ DtGetTags:
 	dc.l	PDTA_DestBitMap,0
 	dc.l	TAG_DONE
 	section	code,code
+
+;--------------------------------------------------------------------
+; InlineIs - is <img> a5 an image in the page itself: an <svg>, or an
+; <img> with a data: URL?
+; Out: d0 = 1 an <svg>, 2 a data: URL (a0 = after its "data:"), 0
+;      neither (CCR set)
+;--------------------------------------------------------------------
+InlineIs:
+	moveq	#1,d0
+	cmp.w	#TAG_SVG,n_Tag(a5)
+	beq.s	.x
+	move.l	a5,a0
+	lea	AnSrc(pc),a1
+	jsr	DomGetAttr
+	tst.l	d0
+	beq.s	.x
+	move.l	d0,a0
+	lea	SData(pc),a1
+	jsr	StrIPrefix
+	beq.s	.x
+	moveq	#2,d0
+.x:	tst.l	d0
+	rts
+
+;--------------------------------------------------------------------
+; InlineBody - the file of an image in the page (InlineIs) into
+; g_Resp+r_Body: an <svg>'s markup (its attributes, its text colour as
+; color= for currentColor, its content), a data: URL's data (base64 or
+; %-encoded)
+; Out: d0 = 1 if a5 is one (CCR set)
+;--------------------------------------------------------------------
+InlineBody:
+	movem.l	d2-d3/a2-a3,-(sp)
+	bsr	InlineIs
+	beq	.x
+	move.l	a0,a2			; (a2 = the data: URL)
+	move.l	d0,d2
+	lea	g_Resp+r_Body(a4),a0
+	jsr	BufClear
+	cmp.l	#1,d2
+	bne	.data
+	lea	g_Resp+r_Body(a4),a0	; "<svg" and its attributes
+	lea	SSvgOpen(pc),a1
+	jsr	BufAppendStr
+	move.l	n_Data(a5),a3
+.at:	move.l	a3,d0
+	beq.s	.col
+	moveq	#'"',d3			; (quoted with ', if " is in it)
+	move.l	at_Value(a3),a0
+.q:	move.b	(a0)+,d0
+	beq.s	.qd
+	cmp.b	#'"',d0
+	bne.s	.q
+	moveq	#39,d3
+.qd:	moveq	#' ',d0
+	bsr	.byte
+	lea	g_Resp+r_Body(a4),a0
+	move.l	at_Name(a3),a1
+	jsr	BufAppendStr
+	moveq	#'=',d0
+	bsr	.byte
+	move.l	d3,d0
+	bsr	.byte
+	lea	g_Resp+r_Body(a4),a0
+	move.l	at_Value(a3),a1
+	jsr	BufAppendStr
+	move.l	d3,d0
+	bsr	.byte
+	move.l	at_Next(a3),a3
+	bra.s	.at
+.col:	lea	-STYLE_SIZEOF(sp),sp	; color="#rrggbb": its text's
+	move.l	a5,a0
+	move.l	sp,a2
+	jsr	ElemStyle
+	move.l	st_Color(sp),d3
+	tst.l	d0
+	bne.s	.c1
+	moveq	#0,d3
+.c1:	lea	STYLE_SIZEOF(sp),sp
+	lea	g_Resp+r_Body(a4),a0
+	lea	SColor(pc),a1
+	jsr	BufAppendStr
+	lea	-12(sp),sp
+	move.l	sp,a0
+	move.l	d3,d0
+	lsl.l	#8,d0
+	jsr	Hex8
+	move.b	#'"',6(sp)
+	move.b	#'>',7(sp)
+	clr.b	8(sp)
+	lea	g_Resp+r_Body(a4),a0
+	move.l	sp,a1
+	jsr	BufAppendStr
+	lea	12(sp),sp
+	move.l	n_First(a5),a3		; its content (raw text)
+.tx:	move.l	a3,d0
+	beq.s	.end
+	cmp.b	#DN_TEXT,n_Type(a3)
+	bne.s	.tn
+	lea	g_Resp+r_Body(a4),a0
+	move.l	n_Data(a3),a1
+	move.l	n_Data2(a3),d0
+	jsr	BufAppend
+.tn:	move.l	n_Next(a3),a3
+	bra.s	.tx
+.end:	lea	g_Resp+r_Body(a4),a0
+	lea	SSvgClose(pc),a1
+	jsr	BufAppendStr
+	bra.s	.y
+.data:	move.l	a2,a0			; data:[type][;base64],data
+.dc:	move.b	(a0)+,d0
+	beq.s	.y			; (no ',': no data)
+	cmp.b	#',',d0
+	bne.s	.dc
+	move.l	a0,a3			; a3 = the data
+	move.l	a2,a0			; ";base64" before it?
+.b:	cmp.l	a3,a0
+	bhs.s	.pct
+	lea	SB64(pc),a1
+	jsr	StrIPrefix
+	bne.s	.b64
+	addq.l	#1,a0
+	bra.s	.b
+.b64:	move.l	a3,a0
+	bsr	B64Body
+	bra.s	.y
+.pct:	move.l	a3,a0
+	bsr	PctBody
+.y:	moveq	#1,d0
+.x:	movem.l	(sp)+,d2-d3/a2-a3
+	rts
+.byte:	lea	g_Resp+r_Body(a4),a0	; (byte d0 appended)
+	jmp	BufAppendByte
+
+; B64Body - (InlineBody) base64 text a0 (to its NUL) decoded, appended
+; to g_Resp+r_Body (other characters passed over)
+B64Body:
+	movem.l	d2-d3/a2,-(sp)
+	move.l	a0,a2
+	moveq	#0,d2			; d2 = bits, d3 = how many
+	moveq	#0,d3
+.l:	move.b	(a2)+,d0
+	beq.s	.x
+	moveq	#62,d1			; the digit's value
+	cmp.b	#'+',d0
+	beq.s	.v
+	cmp.b	#'-',d0
+	beq.s	.v
+	moveq	#63,d1
+	cmp.b	#'/',d0
+	beq.s	.v
+	cmp.b	#'_',d0
+	beq.s	.v
+	moveq	#0,d1
+	move.b	d0,d1
+	sub.b	#'A',d1
+	cmp.b	#25,d1
+	bls.s	.v
+	add.b	#'A'-'a'+26,d1
+	cmp.b	#26,d1
+	blo.s	.l
+	cmp.b	#51,d1
+	bls.s	.v
+	add.b	#'a'-'0'-26+52,d1
+	cmp.b	#52,d1
+	blo.s	.l
+	cmp.b	#61,d1
+	bhi.s	.l
+.v:	lsl.l	#6,d2
+	or.b	d1,d2
+	addq.l	#6,d3
+	cmp.l	#8,d3
+	blo.s	.l
+	subq.l	#8,d3
+	move.l	d2,d0
+	lsr.l	d3,d0
+	lea	g_Resp+r_Body(a4),a0
+	jsr	BufAppendByte
+	bra.s	.l
+.x:	movem.l	(sp)+,d2-d3/a2
+	rts
+
+; PctBody - (InlineBody) text a0 (to its NUL) with %xx decoded, appended
+; to g_Resp+r_Body
+PctBody:
+	movem.l	d2/a2,-(sp)
+	move.l	a0,a2
+.l:	move.b	(a2)+,d0
+	beq.s	.x
+	cmp.b	#'%',d0
+	bne.s	.put
+	move.b	(a2),d0			; two hex digits
+	bsr.s	.hex
+	bmi.s	.pc
+	move.l	d0,d2
+	move.b	1(a2),d0
+	bsr.s	.hex
+	bmi.s	.pc
+	lsl.b	#4,d2
+	or.b	d2,d0
+	addq.l	#2,a2
+	bra.s	.put
+.pc:	moveq	#'%',d0			; (not: as it is)
+.put:	lea	g_Resp+r_Body(a4),a0
+	jsr	BufAppendByte
+	bra.s	.l
+.x:	movem.l	(sp)+,d2/a2
+	rts
+.hex:	and.l	#$ff,d0			; d0 = its value, or -1 (CCR: from d0)
+	sub.b	#'0',d0
+	cmp.b	#9,d0
+	bls.s	.h
+	or.b	#$20,d0
+	sub.b	#'a'-'0',d0
+	cmp.b	#5,d0
+	bhi.s	.hn
+	add.b	#10,d0
+.h:	tst.l	d0
+	rts
+.hn:	moveq	#-1,d0
+	rts
+
+SData:		dc.b	"data:",0
+SB64:		dc.b	";base64",0
+SInline:	dc.b	"inline:",0
+SSvgOpen:	dc.b	"<svg",0
+SColor:		dc.b	" color=",34,"#",0
+SSvgClose:	dc.b	"</svg>",0
+	even
+
+;--------------------------------------------------------------------
+; The page's icon (the tab strip shows it): an <img> that FavAdd puts in
+; the <head>, loaded with the page's images (so the disk cache keeps
+; it as shown, FAV_SIZE square); the tab's record points to its
+; ImageInfo (tb_Fav), until that is freed (FavForget)
+;--------------------------------------------------------------------
+FAV_SIZE	equ	16
+
+; FavAdd - (ImagesStart) the icon's <img> in the <head> of an http(s)
+; page, once: its src the first <link rel="icon">'s (or "shortcut
+; icon"), else /favicon.ico
+FavAdd:
+	movem.l	d2/a2-a3,-(sp)
+	lea	g_PageUrl(a4),a0
+	lea	SHttp(pc),a1
+	jsr	StrIPrefix
+	beq	.x
+	bsr	FavHead
+	beq	.x
+	move.l	d0,a3			; a3 = <head>
+	move.l	n_First(a3),a2		; there already?  Its <link rel=icon>?
+	moveq	#0,d2			; d2 = the href
+.l:	move.l	a2,d0
+	beq.s	.e
+	cmp.b	#DN_ELEMENT,n_Type(a2)
+	bne.s	.n
+	cmp.w	#TAG_IMG,n_Tag(a2)
+	beq	.x
+	cmp.w	#TAG_LINK,n_Tag(a2)
+	bne.s	.n
+	tst.l	d2
+	bne.s	.n
+	move.l	a2,a0
+	lea	SRel(pc),a1
+	jsr	DomGetAttr
+	tst.l	d0
+	beq.s	.n
+	move.l	d0,a0
+	bsr	IconWord
+	beq.s	.n
+	move.l	a2,a0
+	lea	SHref(pc),a1
+	jsr	DomGetAttr
+	move.l	d0,d2
+.n:	move.l	n_Next(a2),a2
+	bra.s	.l
+.e:	tst.l	d2			; none: /favicon.ico (a copy in the page)
+	bne.s	.mk
+	moveq	#SFavEnd-SFav,d0
+	jsr	PageAlloc
+	move.l	d0,d2
+	beq.s	.x
+	lea	SFav(pc),a0
+	move.l	d0,a1
+	jsr	StrCopy
+.mk:	moveq	#DN_ELEMENT,d0
+	moveq	#TAG_IMG,d1
+	jsr	DomNewNode
+	tst.l	d0
+	beq.s	.x
+	move.l	d0,a2
+	move.l	a2,a0
+	lea	AtSrc,a1
+	move.l	d2,d0
+	jsr	DomAddAttr
+	tst.l	d0
+	beq.s	.x
+	lea	AtWidth,a1
+	bsr	.size
+	beq.s	.x
+	lea	AtHeight,a1
+	bsr	.size
+	beq.s	.x
+	move.l	a3,a0
+	move.l	a2,a1
+	jsr	DomAppend
+.x:	movem.l	(sp)+,d2/a2-a3
+	rts
+.size:	move.l	a1,-(sp)		; attribute a1 = FAV_SIZE (a copy
+	moveq	#4,d0			;  in the page)
+	jsr	PageAlloc
+	move.l	(sp)+,a1
+	tst.l	d0
+	beq.s	.sx
+	move.l	d0,a0
+	move.b	#'0'+FAV_SIZE/10,(a0)
+	move.b	#'0'+FAV_SIZE//10,1(a0)
+	clr.b	2(a0)
+	move.l	a2,a0
+	jsr	DomAddAttr
+.sx:	tst.l	d0
+	rts
+
+; IconWord - is "icon" a word of rel value a0 (case blind)?
+; Out: d0 = 1 if so (CCR set)
+IconWord:
+.l:	move.b	(a0),d0			; a word's start
+	beq.s	.no
+	cmp.b	#' ',d0
+	bhi.s	.w
+	addq.l	#1,a0
+	bra.s	.l
+.w:	lea	SIcon(pc),a1
+	jsr	StrIPrefix
+	beq.s	.s
+	move.b	(a0),d0			; (and its end)
+	cmp.b	#' ',d0
+	bls.s	.y
+.s:	move.b	(a0),d0			; to the next word
+	beq.s	.no
+	cmp.b	#' ',d0
+	bls.s	.l
+	addq.l	#1,a0
+	bra.s	.s
+.y:	moveq	#1,d0
+	rts
+.no:	moveq	#0,d0
+	rts
+
+; FavHead - the page's <head> (in <html>)  Out: d0 = it or 0 (CCR set)
+FavHead:
+	move.l	g_Doc(a4),d0
+	beq.s	.x
+	moveq	#TAG_HTML,d1
+	bsr.s	.child
+	beq.s	.x
+	moveq	#TAG_HEAD,d1
+.child:	move.l	d0,a0			; d0 = element d1 in d0 (or 0)
+	move.l	n_First(a0),d0
+.c:	beq.s	.x
+	move.l	d0,a0
+	cmp.b	#DN_ELEMENT,n_Type(a0)
+	bne.s	.cn
+	cmp.w	n_Tag(a0),d1
+	beq.s	.y
+.cn:	move.l	n_Next(a0),d0
+	bra.s	.c
+.y:	move.l	a0,d0
+.x:	rts
+
+; FavSync - the record of the tab in G points to its page's icon, if it
+; has come
+FavSync:
+	move.l	a2,-(sp)
+	sub.l	a2,a2
+	bsr	FavHead
+	beq.s	.set
+	move.l	d0,a0			; its <img>, loaded?
+	move.l	n_First(a0),d0
+.l:	beq.s	.set
+	move.l	d0,a0
+	cmp.b	#DN_ELEMENT,n_Type(a0)
+	bne.s	.n
+	cmp.w	#TAG_IMG,n_Tag(a0)
+	bne.s	.n
+	move.l	n_Data2(a0),a2
+	bra.s	.set
+.n:	move.l	n_Next(a0),d0
+	bra.s	.l
+.set:	move.l	g_TabIn(a4),d0
+	jsr	TabRec
+	cmp.l	tb_Fav(a0),a2
+	beq.s	.x
+	move.l	a2,tb_Fav(a0)
+	beq.s	.x
+	moveq	#0,d0			; (for tests: "favicon WxH" when it
+	move.w	im_W(a2),d0		;  comes, W*1000+H)
+	mulu.w	#1000,d0
+	add.w	im_H(a2),d0
+	lea	LogFavicon(pc),a0
+	suba.l	a1,a1
+	jsr	LogEvent
+.x:	move.l	(sp)+,a2
+	rts
+
+; FavForget - (ImgListFree) ImageInfo a2 freed: no tab shows it
+FavForget:
+	moveq	#TAB_MAX-1,d1
+	lea	g_Tabs(a4),a0
+.l:	cmp.l	tb_Fav(a0),a2
+	bne.s	.n
+	clr.l	tb_Fav(a0)
+.n:	lea	TB_SIZEOF(a0),a0
+	dbf	d1,.l
+	rts
+
+SHttp:	dc.b	"http",0
+LogFavicon:	dc.b	"favicon",0
+SRel:	dc.b	"rel",0
+SHref:	dc.b	"href",0
+SIcon:	dc.b	"icon",0
+SFav:	dc.b	"/favicon.ico",0
+SFavEnd:
+	even

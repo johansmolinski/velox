@@ -13,7 +13,7 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
 - For https: AmiSSL 6, or `velox-proxy.py` running on a modern
   machine
 - Nothing more for images: Velox decodes JPEG, PNG, GIF and WebP
-  itself. Other formats (ILBM, BMP ...) go through the picture
+  and draws SVG itself. Other formats (ILBM, BMP ...) go through the picture
   datatypes the system has.
 
 ## Features
@@ -41,7 +41,8 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
   as multipart/form-data)
 - Images: JPEG (baseline and progressive), PNG (all kinds, with
   transparency), GIF and WebP (lossy, lossless, with alpha) decoded by
-  Velox itself, dithered to the screen's colours (backgrounds: the
+  Velox itself, SVG drawn by it (paths, shapes, transforms, fills and
+  strokes, styles; at the size shown), dithered to the screen's colours (backgrounds: the
   nearest colour, so text on them stays readable), transparency kept;
   other formats through datatypes.library. Loaded while the page is
   already usable.
@@ -70,8 +71,9 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
   images, frames): Shift-click or the middle button opens a link in a
   tab behind, `target="_blank"` in a new tab, and a target name in the
   tab of that name (forms too, a POST's data with it). A strip of the
-  tabs below the toolbar (with two or more): a click shows one, its
-  close box or the middle button closes it, `+` opens one
+  tabs below the toolbar, each with its page's icon (favicon: ICO, PNG,
+  SVG..., kept in the disk cache at the size shown): a click shows one,
+  its close box or the middle button closes it, `+` opens one
 - Image maps: client side (`usemap`, `<area>` rectangles, circles,
   polygons; Tab steps through the areas) and server side (`ismap`)
 - Keyboard navigation for everything; keys typed while a page loads

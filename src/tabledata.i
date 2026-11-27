@@ -104,7 +104,7 @@ TagFlags:
 	dc.w	$0000	; sub
 	dc.w	$0002	; summary
 	dc.w	$0000	; sup
-	dc.w	$0000	; svg
+	dc.w	$0004	; svg
 	dc.w	$0152	; table
 	dc.w	$0840	; tbody
 	dc.w	$0010	; td
@@ -229,7 +229,7 @@ UaStyle:
 	dc.w	$0020	; sub
 	dc.w	$0001	; summary
 	dc.w	$0020	; sup
-	dc.w	$0003	; svg
+	dc.w	$0007	; svg
 	dc.w	$0004	; table
 	dc.w	$0008	; tbody
 	dc.w	$0006	; td

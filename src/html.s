@@ -19,6 +19,7 @@
 	include	"velox.i"
 
 	xdef	AttrNames,AttrNamesEnd	; (pagefile.s: attributes point there)
+	xdef	AtSrc,AtWidth,AtHeight
 
 	xdef	HtmlParse,HtmlBegin,HtmlMore
 	xref	TaskPoll
@@ -179,7 +180,11 @@ HtmlMore:
 	tst.l	g_ParseFinal(a4)
 	bne.s	.mk
 	move.l	g_TokEnd(a4),a0
-	bsr	RawComplete
+	cmp.w	#TAG_SVG,d6		; <svg/>: no content to wait for
+	bne.s	.rc
+	cmp.b	#'/',-2(a0)
+	beq.s	.mk
+.rc:	bsr	RawComplete
 	bne.s	.mk
 	move.l	g_TokStart(a4),a2	; not yet
 	bra	.done
@@ -210,7 +215,11 @@ HtmlMore:
 	move.l	d7,d0
 	and.w	#TF_RAW|TF_RCDATA,d0
 	beq.s	.notraw
-	bsr	RawText
+	cmp.w	#TAG_SVG,d6		; (<svg/>: none)
+	bne.s	.raw
+	tst.l	d5
+	bne	.loop
+.raw:	bsr	RawText
 	bra	.loop
 .notraw:
 	tst.l	d5			; "<foo/>" on unknown elements
@@ -1084,8 +1093,11 @@ AnHref:		dc.b	"href",0
 
 ; known attribute names (stored once, not per element)
 AttrNames:
-	dc.b	"href",0,"src",0,"alt",0,"title",0,"name",0,"value",0
-	dc.b	"type",0,"id",0,"class",0,"style",0,"width",0,"height",0
+	dc.b	"href",0
+AtSrc:	dc.b	"src",0,"alt",0,"title",0,"name",0,"value",0
+	dc.b	"type",0,"id",0,"class",0,"style",0
+AtWidth:	dc.b	"width",0
+AtHeight:	dc.b	"height",0
 	dc.b	"action",0,"method",0,"colspan",0,"rowspan",0,"align",0
 	dc.b	"valign",0,"checked",0,"selected",0,"disabled",0,"size",0
 	dc.b	"maxlength",0,"rows",0,"cols",0,"color",0,"bgcolor",0

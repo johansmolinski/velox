@@ -10,6 +10,7 @@
 	include	"velox.i"
 
 	xdef	StyleRoot,StyleCompute,ParseColor,ParseLength,StyleOf,StyleStale
+	xdef	ElemStyle
 	xref	PageAlloc,CssApply
 	xref	UaStyle,DomGetAttr,ToLower,StrIPrefix,StrIFind,SkipSpace
 	xref	BgFind
@@ -90,6 +91,41 @@ StyleOf:
 .x:	movem.l	(sp)+,d2/a2-a3/a5
 	rts
 
+;--------------------------------------------------------------------
+; ElemStyle - the style of element a0 outside a layout (an image being
+; decoded): its ancestors' first, from the root (kept styles: a copy)
+; In: a0 = element, a2 = output
+; Out: d0 = 0 if it is too deep (CCR set)
+;--------------------------------------------------------------------
+ElemStyle:
+	moveq	#64,d0			; (ancestors at most)
+ElemStyleN:
+	movem.l	a2/a5,-(sp)
+	move.l	a0,a5
+	lea	-STYLE_SIZEOF(sp),sp	; the parent's style
+	move.l	n_Parent(a5),d1
+	beq.s	.root
+	move.l	d1,a0
+	cmp.b	#DN_ELEMENT,n_Type(a0)
+	bne.s	.root
+	subq.l	#1,d0
+	beq.s	.x			; (d0 = 0)
+	move.l	sp,a2
+	bsr.s	ElemStyleN
+	beq.s	.x
+	bra.s	.me
+.root:	move.l	sp,a0
+	bsr	StyleRoot
+.me:	move.l	a5,a0
+	move.l	sp,a1
+	move.l	STYLE_SIZEOF(sp),a2
+	bsr	StyleOf
+	moveq	#1,d0
+.x:	lea	STYLE_SIZEOF(sp),sp
+	movem.l	(sp)+,a2/a5
+	tst.l	d0
+	rts
+
 ; StyleStale - the style sheets or media changed: kept styles are not
 ; to be used
 StyleStale:
@@ -120,7 +156,8 @@ StyleCompute:
 	clr.l	st_Width(a3)
 	clr.l	st_FlexF(a3)		; (st_FlexF .. st_FlexPad)
 	clr.l	st_FlexF+4(a3)
-	and.b	#~(SF_MAUTO|SF_FLOATL|SF_FLOATR|SF_MAUTOL|SF_MAUTOR),st_Flags(a3)
+	clr.l	st_MaxW(a3)		; (st_MaxW, st_MaxH)
+	and.b	#~(SF_MAUTO|SF_FLOATL|SF_FLOATR|SF_MAUTOL|SF_MAUTOR|SF_TFIXED),st_Flags(a3)
 
 	; user agent defaults
 	moveq	#0,d0

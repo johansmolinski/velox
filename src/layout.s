@@ -22,14 +22,14 @@
 
 	xdef	LayoutDocument,LayoutChildren,LayoutNode,LayoutBlockContent
 	xdef	FlushLine,LineReset,AddMargin,AddRun,RunCount,RunPtr,Measure
-	xdef	ApplyPendingMargin,IntAttr,ClearFloats,FindAnchor
+	xdef	ApplyPendingMargin,IntAttr,ClearFloats,FindAnchor,LayoutRange
 	xdef	LayRunCount,LayRunPtr,LayPoll,LayoutBlock
 	xref	BufAppend
 	IFD	PROFILE
 	xref	ProfRead
 	ENDC
 	xref	StyleRoot,StyleCompute,BufClear,BufReserve,PageAlloc,FmtDec,StyleOf
-	xref	DomGetAttr,ParseDec,LayoutTable,CssApply
+	xref	DomGetAttr,ParseDec,LayoutTable,CssApply,CssTableMode
 	xref	FormIsControl,FormControlSize,CssInvalidate,TaskPoll,BufFree,LogEvent
 	xref	ViewSelect,LayoutFlex
 
@@ -250,7 +250,13 @@ LayoutNode:
 	beq.s	.inline
 	cmp.b	#DISP_IBLOCK,d0
 	beq.s	.replaced
-	move.l	a5,a0			; block, list item, table, ...
+	cmp.b	#DISP_CELL,d0		; a CSS table-cell outside a table:
+	bne.s	.blk			; side by side
+	cmp.w	#TAG_TD,d1
+	beq.s	.blk
+	cmp.w	#TAG_TH,d1
+	bne.s	.inline
+.blk:	move.l	a5,a0			; block, list item, table, ...
 	move.l	a3,a1
 	bsr	LayoutBlock
 	bra.s	.pop
@@ -511,7 +517,14 @@ LayoutBlock:
 	movem.l	d2-d7/a2-a3/a5,-(sp)
 	move.l	a0,a5
 	move.l	a1,a3
-	bsr	FlushLine
+	cmp.b	#DISP_TABLE,st_Display(a3)	; a CSS table without rows or
+	bne.s	.nct				; cells: a block
+	cmp.w	#TAG_TABLE,n_Tag(a5)
+	beq.s	.nct
+	jsr	CssTableMode
+	bne.s	.nct
+	move.b	#DISP_BLOCK,st_Display(a3)
+.nct:	bsr	FlushLine
 	moveq	#0,d0
 	move.w	st_MTop(a3),d0
 	bsr	AddMargin
@@ -658,6 +671,34 @@ LayoutBlockContent:
 	move.l	d4,g_LayAlign(a4)
 	move.l	d5,g_LayWhite(a4)
 	movem.l	(sp)+,d2-d5
+	rts
+
+; LayoutRange - nodes a0 .. d0 (the last) as a block's content, with
+; parent style a1 (an anonymous CSS table cell)
+LayoutRange:
+	movem.l	d2-d5/a2-a3,-(sp)
+	move.l	a0,a2
+	move.l	a1,a3
+	move.l	d0,d2
+	move.l	g_LayAlign(a4),d4
+	move.l	g_LayWhite(a4),d5
+	moveq	#0,d0
+	move.b	st_Align(a3),d0
+	move.l	d0,g_LayAlign(a4)
+	move.b	st_White(a3),d0
+	move.l	d0,g_LayWhite(a4)
+.l:	move.l	a2,a0
+	move.l	a3,a1
+	bsr	LayoutNode
+	cmp.l	a2,d2
+	beq.s	.d
+	move.l	n_Next(a2),a2
+	move.l	a2,d0
+	bne.s	.l
+.d:	bsr	FlushLine
+	move.l	d4,g_LayAlign(a4)
+	move.l	d5,g_LayWhite(a4)
+	movem.l	(sp)+,d2-d5/a2-a3
 	rts
 
 ; BlockBounds - apply margins, width and alignment of a block

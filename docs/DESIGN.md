@@ -480,7 +480,7 @@ JS is not on the roadmap yet, but it must stay possible to add. That means:
 | style.s     | computed style from the user-agent rules and HTML attributes     |
 | css.s       | author style sheets: parsing, matching, cascade                 |
 | layout.s    | blocks, inline text, replaced elements: the run list            |
-| table.s     | automatic table layout                                          |
+| table.s     | table layout (also CSS tables: display: table on any element)  |
 | forms.s     | form controls, their keys, submission                           |
 | edit.s      | editing a field or text area: soft-wrapped lines, moves, selection, undo |
 | flex.s      | flexbox: items in rows (measured as table cells) or columns       |

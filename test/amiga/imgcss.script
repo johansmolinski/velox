@@ -1,0 +1,7 @@
+; imgcss: images sized by CSS (width, height: auto, max-width,
+; max-height), the same image at two sizes
+Echo >VELOX:r/imgcss.txt "imgcss"
+Echo >VELOX:r/imgcss.start ""
+VELOX:velox http://127.0.0.1:8080/imgcss.html LOG=VELOX:r/imgcss.log
+Echo >>VELOX:r/imgcss.txt "exit rc=$RC"
+Echo >>VELOX:r/imgcss.txt "done"

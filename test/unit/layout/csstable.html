@@ -1,0 +1,19 @@
+<html><head><style>
+.t{display:table;width:100%}
+.c{display:table-cell;padding:0 8px}
+.w{width:64px}
+.r{display:table-row}
+.g{display:table-row-group}
+.col{display:table-column}
+.fx{display:table;table-layout:fixed;width:320px}
+.fx>div{display:table-cell}
+.bg{background:#cccccc}
+</style></head><body>
+<div class="t"><span class="c w bg">icon</span><div class="c">main text</div><div class="c w">stats</div></div>
+<div class="t"><div class="col"></div><div class="g"><div class="r"><div class="c">a1</div><div class="c">b1</div></div>
+<div class="r"><div class="c">a2 longer</div><div class="c">b2</div></div></div></div>
+<div class="t"><span class="c w">icon</span><div>main</div><div>extra</div></div>
+<div class="fx"><div class="w">fixed widths</div><div>rest</div></div>
+<div class="t"><p>no cells</p><p>a block</p></div>
+<p>stray <span class="c">cell</span> inline</p>
+</body></html>

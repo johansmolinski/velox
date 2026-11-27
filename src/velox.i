@@ -257,6 +257,7 @@ SF_FLOATL	equ	4		; st_Flags: float: left (images)
 SF_FLOATR	equ	8		; st_Flags: float: right
 SF_MAUTOL	equ	$10		; st_Flags: margin-left: auto (flex items)
 SF_MAUTOR	equ	$20		; st_Flags: margin-right: auto
+SF_TFIXED	equ	$40		; st_Flags: table-layout: fixed
 FF_COLUMN	equ	1		; st_FlexF: flex-direction: column
 FF_WRAP		equ	2		; ... flex-wrap: wrap
 FF_NOSHRINK	equ	4		; ... (an item) flex-shrink: 0
@@ -305,6 +306,8 @@ st_Grow		rs.b	1		; an item's flex-grow (0 - 255)
 st_Gap		rs.b	1		; column-gap, px
 st_RGap		rs.b	1		; row-gap, px
 st_FlexPad	rs.b	1
+st_MaxW		rs.w	1		; an image's max-width (px; negative:
+st_MaxH		rs.w	1		;  percent), max-height; 0 none
 STYLE_SIZEOF	rs.b	0
 SK_GEN		equ	0		; n_Style (style.s): g_StyleGen,
 SK_PARENT	equ	4		; the parent's style,

@@ -33,7 +33,7 @@ bmh_Height		equ	2
 
 	xdef	BgFind,ImagesLoad,ImagesReap,ImagesReapNow,ImagesQuit
 	xref	DcLoadImg,DcImgFree,DcFresh,DcCond,DcHash,DcStoreImg,PicFromCache,PbmKeepFree,HttpGet,StrCopy,StrCopyN,FmtDec
-	xref	DcTouch
+	xref	DcTouch,ElemStyle
 	xref	TaskPoll,TaskWaitSig,TaskWaitLock
 	IFD	PROFILE
 	xdef	ProfRead,ProfLog
@@ -727,12 +727,15 @@ ImagesStep:
 	rts
 
 ; ShareImage - give the <img>s still queued that show the same picture
-; as <img> a5 (the same src, width and height attributes: the same
-; URL and size) a5's ImageInfo: fetched, decoded and in chip memory
-; once, and all shown at once
+; as <img> a5 (the same src and the same size from their styles: the
+; same URL and size) a5's ImageInfo: fetched, decoded and in chip
+; memory once, and all shown at once
 ShareImage:
-	movem.l	d2/a2-a3,-(sp)
+	movem.l	d2-d4/a2-a3,-(sp)
 	move.l	n_Data2(a5),a3		; a3 = the ImageInfo
+	bsr	ImgBox
+	move.l	d0,d3			; d3/d4 = its size and maxima
+	move.l	d1,d4
 	move.l	g_ImgNext(a4),d2
 .l:	cmp.l	g_ImgCount(a4),d2
 	bhs.s	.x
@@ -744,16 +747,18 @@ ShareImage:
 	lea	AnSrc(pc),a1
 	bsr.s	SameAttr
 	beq.s	.l
-	lea	AnWidth(pc),a1
-	bsr.s	SameAttr
-	beq.s	.l
-	lea	AnHeight(pc),a1
-	bsr.s	SameAttr
-	beq.s	.l
+	move.l	a5,-(sp)
+	move.l	a2,a5
+	bsr	ImgBox
+	move.l	(sp)+,a5
+	cmp.l	d3,d0
+	bne.s	.l
+	cmp.l	d4,d1
+	bne.s	.l
 	move.l	a3,n_Data2(a2)
 	addq.l	#1,g_ImgLoaded(a4)
 	bra.s	.l
-.x:	movem.l	(sp)+,d2/a2-a3
+.x:	movem.l	(sp)+,d2-d4/a2-a3
 	rts
 
 ; SameAttr - do <img> a5 and a2 have the same attribute a1 (or neither)?
@@ -791,6 +796,7 @@ LogImages:	dc.b	"images",0
 LogImgStop:	dc.b	"imgstop",0
 LogImgTime:	dc.b	"imgtime",0
 LogImgConv:	dc.b	"imgconv",0
+LogImgSize:	dc.b	"imgsize",0
 MsgStopped:	dc.b	"Stopped",0
 	even
 
@@ -1070,12 +1076,15 @@ ImgKey:
 	lea	g_ImgKey(a4),a1
 	jsr	StrCopy
 	move.l	a1,a2
-	move.l	a5,a0
-	lea	AnWidth(pc),a1
-	bsr.s	.attr
-	move.l	a5,a0
-	lea	AnHeight(pc),a1
-	bsr.s	.attr
+	bsr	ImgBox			; "|size|maxima|"
+	move.l	d1,-(sp)
+	move.b	#'|',(a2)+
+	move.l	a2,a0
+	jsr	FmtDec
+	move.b	#'|',(a0)+
+	move.l	(sp)+,d0
+	jsr	FmtDec
+	move.l	a0,a2
 	move.b	#'|',(a2)+
 	jsr	GuiPageWidth
 	move.l	a2,a0
@@ -1088,17 +1097,6 @@ ImgKey:
 	move.l	d0,g_ImgKeyOk(a4)
 	movem.l	(sp)+,a2
 	rts
-.attr:	move.b	#'|',(a2)+		; "|value" (16 characters at most)
-	jsr	DomGetAttr
-	tst.l	d0
-	beq.s	.ax
-	move.l	d0,a0
-	moveq	#16-1,d1
-.ac:	move.b	(a0)+,d0
-	beq.s	.ax
-	move.b	d0,(a2)+
-	dbf	d1,.ac
-.ax:	rts
 
 ;--------------------------------------------------------------------
 ; ImgCached - give <img> a5 the image DcLoadImg read (shown as it was:
@@ -1112,17 +1110,13 @@ ImgCached:
 	move.l	g_DcHdr+dh_H(a4),d5
 	move.l	d4,g_DecW(a4)
 	move.l	d5,g_DecH(a4)
-	moveq	#1,d6			; width= and height=: the layout stays
-	move.l	a5,a0
-	lea	AnWidth(pc),a1
-	jsr	DomGetAttr
-	tst.l	d0
-	beq.s	.d6
-	move.l	a5,a0
-	lea	AnHeight(pc),a1
-	jsr	DomGetAttr
-	tst.l	d0
-	beq.s	.d6
+	moveq	#1,d6			; the size its style gives: the
+	bsr	ImgBox			; layout stays
+	move.l	d4,d1
+	swap	d1
+	move.w	d5,d1
+	cmp.l	d0,d1
+	bne.s	.d6
 	moveq	#0,d6
 .d6:	bsr	PixMask
 	lea	PicCacheWork(pc),a0
@@ -1417,36 +1411,55 @@ Ticks:
 ;      changes); d0 = 0 if it cannot be shown (CCR set); d7 changed
 ;--------------------------------------------------------------------
 WantedSize:
-	; wanted size: width=/height= (one of them keeps the aspect)
+	; wanted size: its style's (one of width and height keeps the
+	; aspect), then max-width and max-height
 	move.l	d2,d4
 	move.l	d3,d5
 	moveq	#0,d6			; 1 if the size depends on the image
-	move.l	a5,a0
-	lea	AnWidth(pc),a1
-	bsr	PxAttr
-	move.l	d0,d7			; wanted width or 0
-	move.l	a5,a0
-	lea	AnHeight(pc),a1
-	bsr	PxAttr			; d0 = wanted height or 0
+	bsr	ImgBox
+	move.l	d1,-(sp)		; (the maxima)
+	move.l	d0,d7
+	clr.w	d7
+	swap	d7			; d7 = wanted width or 0
+	and.l	#$ffff,d0		; d0 = wanted height or 0
 	tst.l	d7
 	beq.s	.now
 	move.l	d7,d4
 	tst.l	d0
 	beq.s	.hfromw
 	move.l	d0,d5
-	bra.s	.fit
+	bra.s	.max
 .hfromw:
 	move.l	d3,d5			; h = h0 * w / w0
 	mulu.l	d4,d5
 	divu.l	d2,d5
-	bra.s	.fit
+	bra.s	.max
 .now:	moveq	#1,d6
 	tst.l	d0
-	beq.s	.fit
+	beq.s	.max
 	move.l	d0,d5			; w = w0 * h / h0
 	move.l	d2,d4
 	mulu.l	d5,d4
 	divu.l	d3,d4
+.max:	move.l	(sp)+,d1
+	move.l	d1,d0
+	clr.w	d0
+	swap	d0			; max-width
+	beq.s	.mh
+	cmp.l	d0,d4
+	ble.s	.mh
+	mulu.l	d0,d5			; h = h * maxw / w
+	divu.l	d4,d5
+	move.l	d0,d4
+	moveq	#1,d6
+.mh:	and.l	#$ffff,d1		; max-height
+	beq.s	.fit
+	cmp.l	d1,d5
+	ble.s	.fit
+	mulu.l	d1,d4			; w = w * maxh / h
+	divu.l	d5,d4
+	move.l	d1,d5
+	moveq	#1,d6
 .fit:	; never wider than the page
 	jsr	GuiPageWidth
 	sub.l	#16,d0
@@ -1479,6 +1492,49 @@ WantedSize:
 	rts
 
 ;--------------------------------------------------------------------
+; ImgBox - the size <img> a5 is to be shown at as its style says
+; (width=, height=, CSS): in pixels, 0 if not given (or a percent)
+; Out: d0 = width << 16 | height, d1 = max-width << 16 | max-height
+;--------------------------------------------------------------------
+ImgBox:
+	movem.l	d2/a2,-(sp)
+	lea	-STYLE_SIZEOF(sp),sp
+	move.l	a5,a0
+	move.l	sp,a2
+	jsr	ElemStyle
+	beq.s	.attr
+	move.l	st_MaxW(sp),d0		; (st_MaxW, st_MaxH)
+	bsr.s	.pos
+	move.l	d0,d2
+	move.l	st_Width(sp),d0		; (st_Width, st_Height)
+	bsr.s	.pos
+	move.l	d2,d1
+	bra.s	.x
+.attr:	move.l	a5,a0			; (too deep) width=, height=
+	lea	AnWidth(pc),a1
+	bsr	PxAttr
+	move.l	d0,d2
+	swap	d2
+	move.l	a5,a0
+	lea	AnHeight(pc),a1
+	bsr	PxAttr
+	move.w	d0,d2
+	move.l	d2,d0
+	moveq	#0,d1
+.x:	lea	STYLE_SIZEOF(sp),sp
+	movem.l	(sp)+,d2/a2
+	rts
+.pos:	tst.w	d0			; negative words (percent): 0
+	bpl.s	.p1
+	clr.w	d0
+.p1:	swap	d0
+	tst.w	d0
+	bpl.s	.p2
+	clr.w	d0
+.p2:	swap	d0
+	rts
+
+;--------------------------------------------------------------------
 ; AddImage - give <img> a5 its image
 ; In:  d7 = bitmap, a0 = its mask plane or 0, d4/d5 = size, d6 = 1 if
 ;      the layout changes
@@ -1502,7 +1558,13 @@ AddImage:
 	beq.s	.ok
 	moveq	#1,d0			; its size changes the layout
 	move.l	d0,g_ImgRelayout(a4)
-.ok:	moveq	#1,d0
+.ok:	move.l	d4,d0			; (for tests: "imgsize W*1000+H")
+	mulu.l	#1000,d0
+	add.l	d5,d0
+	lea	LogImgSize(pc),a0
+	suba.l	a1,a1
+	jsr	LogEvent
+	moveq	#1,d0
 	rts
 .nomem:	move.l	a1,d0
 	beq.s	.nm

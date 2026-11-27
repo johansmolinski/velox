@@ -3,24 +3,33 @@
 ;
 ; Automatic table layout: every column gets a minimum width (longest
 ; word / fixed content) and a preferred width (content without
-; wrapping).  If the preferred widths fit they are used, otherwise each
+; wrapping).  If the preferred widths fit they are used (room left in a
+; table given a width goes to the columns without one), otherwise each
 ; column gets its minimum plus a share of the remaining space in
 ; proportion to (preferred - minimum).  Cells are laid out as blocks in
 ; their columns; a row is as high as its tallest cell.
+; CSS tables (display: table on another element): rows are the
+; children with display: table-row (in table-row-groups too), their
+; element children the cells; or, without rows, the element children
+; are the cells of one row if one of them is a table-cell (an element
+; between them a cell of its own; neither: a block).  No spacing; the
+; cells' paddings.
 ;
 
 	include	"velox.i"
 
-	xdef	LayoutTable,MeasureCell,MeasureItem
+	xdef	LayoutTable,MeasureCell,MeasureItem,CssTableMode
 	xref	StyleCompute,CssApply,LayoutBlockContent,LayoutNode,StyleOf
 	xref	LayPoll
 	xref	LineReset,AddRun,LayRunPtr,LayRunCount,ApplyPendingMargin
 	xref	Measure,DomGetAttr,ParseDec,FormIsControl,FormControlSize
-	xref	ClearFloats
+	xref	ClearFloats,LayoutRange
 
 MAXCOLS		equ	48
 MAXSPANS	equ	32		; colspan cells applied after the others
 MAX_MDEPTH	equ	100
+TM_ROWS		equ	1		; tb_Css: a CSS table of rows
+TM_CELLS	equ	2		; ... of one row (the table itself)
 
 	RSRESET
 tb_Min		rs.l	MAXCOLS
@@ -52,6 +61,11 @@ tb_RsTop	rs.l	MAXCOLS		; at its column: its top ...
 tb_RsBot	rs.l	MAXCOLS		; ... its content bottom (0: none)
 tb_RsRect	rs.l	MAXCOLS		; ... its background run
 tb_RsBox	rs.l	MAXCOLS		; ... its outline run
+tb_Fixed	rs.b	MAXCOLS		; a column with a width given
+tb_Css		rs.l	1		; a CSS table: 1 rows, 2 one row (TM_xxx)
+tb_TFix		rs.l	1		; table-layout: fixed (and a width)
+tb_Group	rs.l	1		; CSS: the cell is anonymous (IsCell):
+tb_GLast	rs.l	1		; ... nodes up to this one
 tb_SIZEOF	rs.b	0
 
 	section	code,code
@@ -70,6 +84,20 @@ LayoutTable:
 	clr.l	tb_Squeezed(a3)
 	clr.l	tb_NSpans(a3)
 	bsr	RsClear
+	clr.l	tb_TFix(a3)
+	move.l	tb_Style(a3),a0
+	btst	#6,st_Flags(a0)		; SF_TFIXED: with a width only
+	beq.s	.auto0
+	tst.w	st_Width(a0)
+	sne	tb_TFix+3(a3)
+.auto0:	clr.l	tb_Css(a3)
+	cmp.w	#TAG_TABLE,n_Tag(a5)
+	beq.s	.html
+	move.l	a5,a0
+	move.l	tb_Style(a3),a1
+	bsr	CssTableMode
+	move.l	d0,tb_Css(a3)
+.html:
 
 	lea	AnCellspacing(pc),a1
 	moveq	#2,d0
@@ -94,7 +122,12 @@ LayoutTable:
 .b1:	moveq	#1,d0
 	move.l	d0,tb_Border(a3)
 	addq.l	#1,tb_Pad(a3)		; room for the cell outline
-.nob:
+.nob:	tst.l	tb_Css(a3)		; CSS: no spacing (its paddings: the
+	beq.s	.cap0			;  cells')
+	clr.l	tb_Spacing(a3)
+	clr.l	tb_Pad(a3)
+	clr.l	tb_Border(a3)
+.cap0:
 	; captions first, as centred blocks
 	move.l	n_First(a5),a2
 .cap:	move.l	a2,d0
@@ -117,6 +150,10 @@ LayoutTable:
 	move.l	d0,a2
 	tst.l	d0
 	beq.s	.crd
+	move.l	a2,a0
+	move.l	tb_Style(a3),a1
+	bsr	RowStyle
+	beq.s	.cr
 	moveq	#0,d4
 	move.l	n_First(a2),d0
 .cc:	tst.l	d0
@@ -126,6 +163,9 @@ LayoutTable:
 	beq.s	.ccn
 	bsr	SpanOf
 	add.l	d0,d4
+	tst.l	tb_Group(a3)		; (an anonymous cell: to its end)
+	beq.s	.ccn
+	move.l	tb_GLast(a3),a0
 .ccn:	move.l	n_Next(a0),d0
 	bra.s	.cc
 .ccd:	cmp.l	d4,d3
@@ -143,6 +183,10 @@ LayoutTable:
 	move.w	#MAXCOLS*2-1,d0
 .clr:	clr.l	(a0)+
 	dbf	d0,.clr
+	lea	tb_Fixed(a3),a0
+	moveq	#MAXCOLS/4-1,d0
+.clf:	clr.l	(a0)+
+	dbf	d0,.clf
 
 	; measure every cell
 	sub.l	a2,a2
@@ -176,19 +220,37 @@ LayoutTable:
 	lea	tb_RowStyle(a3),a1
 	lea	tb_CellStyle(a3),a2
 	bsr	CellStyle
+	moveq	#0,d0			; table-layout: fixed: no content,
+	moveq	#0,d1			; the widths given
+	tst.l	tb_TFix(a3)
+	bne.s	.mfix
 	move.l	d6,a0
 	lea	tb_CellStyle(a3),a1
-	bsr	MeasureCell		; d0 = min, d1 = pref (content)
+	bsr	CellMeasure		; d0 = min, d1 = pref (content)
+.mfix:
 	move.l	tb_Pad(a3),d2
 	add.l	d2,d2
-	add.l	d2,d0
+	tst.l	tb_Css(a3)		; (CSS: the cell's paddings)
+	beq.s	.mpad
+	move.w	tb_CellStyle+st_MLeft(a3),d2
+	add.w	tb_CellStyle+st_MRight(a3),d2
+	ext.l	d2
+.mpad:	add.l	d2,d0
 	add.l	d2,d1
 	move.w	tb_CellStyle+st_Width(a3),d2	; width="120": a wish
 	ble.s	.nofix
 	ext.l	d2
+	tst.l	tb_TFix(a3)		; (fixed: even if narrower; else
+	bne.s	.fixw			;  at least its content's minimum)
 	cmp.l	d0,d2
-	blt.s	.nofix
-	move.l	d2,d1
+	bge.s	.fixw
+	move.l	d0,d2
+.fixw:	move.l	d2,d1
+	cmp.l	#1,d7			; (its column keeps it: no less)
+	bne.s	.nofix
+	lea	tb_Fixed(a3),a0
+	st	(a0,d5.l)
+	move.l	d2,d0
 .nofix:	cmp.l	d0,d1
 	bge.s	.pok
 	move.l	d0,d1
@@ -229,6 +291,9 @@ LayoutTable:
 	bne.s	.ms
 .msd:	move.l	d6,a2
 	move.l	n_Parent(a2),a2		; (a2 is the row again below)
+	tst.l	tb_Group(a3)
+	beq.s	.mcn2
+	move.l	tb_GLast(a3),d6
 	bra.s	.mcn2
 .mcn:	move.l	d6,a0
 	move.l	n_Parent(a0),a2
@@ -475,6 +540,8 @@ LayoutTable:
 	bpl.s	.cim
 	tst.l	st_BgImg(a0)
 	bne.s	.cim
+	cmp.l	a5,a2			; (one row of a CSS table: the
+	beq.s	.nocbg			;  table's)
 	lea	tb_RowStyle(a3),a0
 	move.l	st_Bg(a0),d1
 	bpl.s	.cim
@@ -504,11 +571,28 @@ LayoutTable:
 	bgt.s	.wok
 	move.l	d2,d3
 	addq.l	#1,d3
-.wok:	move.l	d2,g_LayLeft(a4)
+.wok:	tst.l	tb_Css(a3)		; CSS: the cell's paddings
+	beq.s	.wok2
+	move.w	tb_CellStyle+st_MLeft(a3),d0
+	ext.l	d0
+	add.l	d0,d2
+	move.w	tb_CellStyle+st_MRight(a3),d0
+	ext.l	d0
+	sub.l	d0,d3
+	cmp.l	d2,d3
+	bgt.s	.wok2
+	move.l	d2,d3
+	addq.l	#1,d3
+.wok2:	move.l	d2,g_LayLeft(a4)
 	move.l	d3,g_LayRight(a4)
 	move.l	tb_RowTop(a3),d0
 	add.l	tb_Pad(a3),d0
-	move.l	d0,g_LayY(a4)
+	tst.l	tb_Css(a3)
+	beq.s	.wok3
+	move.w	tb_CellStyle+st_MTop(a3),d1
+	ext.l	d1
+	add.l	d1,d0
+.wok3:	move.l	d0,g_LayY(a4)
 	clr.l	g_PendMargin(a4)
 	clr.l	g_Marker(a4)
 	jsr	LineReset
@@ -526,8 +610,14 @@ LayoutTable:
 	jsr	LineReset
 	move.l	d6,a0
 	lea	tb_CellStyle(a3),a1
+	tst.l	tb_Group(a3)
+	bne.s	.lgrp
 	jsr	LayoutBlockContent
-	jsr	ClearFloats		; and contains them
+	bra.s	.lcd
+.lgrp:	lea	tb_RowStyle(a3),a1	; an anonymous cell: its nodes
+	move.l	tb_GLast(a3),d0
+	jsr	LayoutRange
+.lcd:	jsr	ClearFloats		; and contains them
 	move.l	(sp)+,g_FlLBot(a4)
 	move.l	(sp)+,g_FlLEdge(a4)
 	move.l	(sp)+,g_FlRBot(a4)
@@ -535,7 +625,14 @@ LayoutTable:
 	move.l	(sp)+,g_Squeeze(a4)
 	move.l	g_LayY(a4),d0
 	add.l	tb_Pad(a3),d0
-	moveq	#0,d1			; height="..." on the cell
+	tst.l	tb_Css(a3)		; CSS: the last margin in it and
+	beq.s	.hpad			;  its bottom padding
+	add.l	g_PendMargin(a4),d0
+	clr.l	g_PendMargin(a4)
+	move.w	tb_CellStyle+st_MBottom(a3),d1
+	ext.l	d1
+	add.l	d1,d0
+.hpad:	moveq	#0,d1			; height="..." on the cell
 	move.w	tb_CellStyle+st_Height(a3),d1
 	add.l	tb_RowTop(a3),d1
 	cmp.l	d1,d0
@@ -564,6 +661,9 @@ LayoutTable:
 	ble.s	.nb
 	move.l	d0,tb_RowBottom(a3)
 .nb:	add.l	d7,d5
+	tst.l	tb_Group(a3)
+	beq.s	.celln
+	move.l	tb_GLast(a3),d6
 .celln:	move.l	d6,a0
 	move.l	n_Next(a0),d6
 	bra	.cell
@@ -751,28 +851,53 @@ CopyW:	lea	tb_W(a3),a1
 	dbf	d0,.c
 	rts
 
-; SpreadExtra - widths = pref + extra * pref / sum(pref)
+; SpreadExtra - widths = pref + extra * pref / sum(pref), over the
+; columns without a width given if there are any (tb_Fixed)
 ; In: d1 = extra, d3 = sum of preferred widths
 SpreadExtra:
-	movem.l	d2/d4-d5,-(sp)
+	movem.l	d2-d7,-(sp)
+	moveq	#0,d6			; d6 = columns that grow, d7 = their
+	moveq	#0,d7			; preferred widths
+	moveq	#0,d4
+.c:	lea	tb_Fixed(a3),a0
+	tst.b	(a0,d4.l)
+	bne.s	.c1
+	addq.l	#1,d6
 	lea	tb_Pref(a3),a0
-	lea	tb_W(a3),a1
-	move.l	tb_Cols(a3),d4
-	subq.l	#1,d4
-.l:	move.l	(a0)+,d0
-	move.l	d0,d5
-	tst.l	d3
+	add.l	(a0,d4.l*4),d7
+.c1:	addq.l	#1,d4
+	cmp.l	tb_Cols(a3),d4
+	blo.s	.c
+	moveq	#0,d5			; d5 = 0: all grow
+	tst.l	d6
+	bne.s	.some
+	move.l	tb_Cols(a3),d6
+	move.l	d3,d7
+	moveq	#1,d5
+.some:	moveq	#0,d4
+.l:	lea	tb_Pref(a3),a0
+	move.l	(a0,d4.l*4),d0
+	move.l	d0,d3			; d3 = its width
+	tst.l	d5
+	bne.s	.grow
+	lea	tb_Fixed(a3),a0
+	tst.b	(a0,d4.l)
+	bne.s	.add0
+.grow:	tst.l	d7
 	bne.s	.prop
 	move.l	d1,d2			; all empty: equal shares
-	divul.l	tb_Cols(a3),d0:d2
+	divul.l	d6,d0:d2
 	bra.s	.add
 .prop:	move.l	d1,d2
 	mulu.l	d0,d2
-	divul.l	d3,d0:d2
-.add:	add.l	d2,d5
-	move.l	d5,(a1)+
-	dbf	d4,.l
-	movem.l	(sp)+,d2/d4-d5
+	divul.l	d7,d0:d2
+.add:	add.l	d2,d3
+.add0:	lea	tb_W(a3),a0
+	move.l	d3,(a0,d4.l*4)
+	addq.l	#1,d4
+	cmp.l	tb_Cols(a3),d4
+	blo.s	.l
+	movem.l	(sp)+,d2-d7
 	rts
 
 ; MixWidths - widths = min + room * (pref - min) / sum(pref - min)
@@ -804,6 +929,8 @@ MixWidths:
 ; NextRow - next <tr> of the table a5, looking inside thead/tbody/tfoot
 ; In: a1 = current row or 0; Out: d0 = row or 0
 NextRow:
+	tst.l	tb_Css(a3)
+	bne.s	CssNextRow
 	move.l	a1,d0
 	beq.s	.first
 	move.l	a1,a0
@@ -835,11 +962,91 @@ NextRow:
 .none:	moveq	#0,d0
 .x:	rts
 
+; CssNextRow - (NextRow) of a CSS table: the next child with display:
+; table-row (in table-row-groups too); one row: the table
+CssNextRow:
+	cmp.l	#TM_ROWS,tb_Css(a3)
+	beq.s	.rows
+	moveq	#0,d0
+	move.l	a1,d1
+	bne.s	.x
+	move.l	a5,d0
+.x:	rts
+.rows:	move.l	a1,d0
+	beq.s	.first
+	move.l	a1,a0
+.adv:	move.l	n_Next(a0),d0
+	bne.s	.scan
+	move.l	n_Parent(a0),a0
+	cmp.l	a5,a0
+	beq.s	.none
+	move.l	a0,d0
+	beq.s	.none
+	bra.s	.adv
+.first:	move.l	n_First(a5),d0
+	beq.s	.none
+.scan:	move.l	d0,a0
+	cmp.b	#DN_ELEMENT,n_Type(a0)
+	bne.s	.adv
+	move.l	tb_Style(a3),a1
+	bsr	DispOf
+	cmp.b	#DISP_ROW,d0
+	beq.s	.row
+	cmp.b	#DISP_ROWGROUP,d0
+	bne.s	.adv
+	move.l	n_First(a0),d0
+	bne.s	.scan
+	bra.s	.adv
+.row:	move.l	a0,d0
+	rts
+.none:	moveq	#0,d0
+	rts
+
+; DispOf - the display of element a0 with parent style a1 (tb_CellStyle
+; used); Out: d0 (a0 kept)
+DispOf:
+	movem.l	a0/a2,-(sp)
+	lea	tb_CellStyle(a3),a2
+	jsr	StyleOf
+	moveq	#0,d0
+	move.b	tb_CellStyle+st_Display(a3),d0
+	movem.l	(sp)+,a0/a2
+	rts
+
 ; IsCell - In: a0 = node; Out: Z clear if <td>/<th>.  a0 kept.
+; A CSS table: a table-cell, or the elements and text up to the next
+; one (shown; tb_Group set, the last node in tb_GLast).
 IsCell:
+	clr.l	tb_Group(a3)
 	cmp.b	#DN_ELEMENT,n_Type(a0)
 	bne.s	.no
-	move.w	n_Tag(a0),d0
+	tst.l	tb_Css(a3)
+	beq.s	.html
+	lea	tb_RowStyle(a3),a1
+	bsr	DispOf
+	cmp.b	#DISP_NONE,d0
+	beq.s	.no
+	cmp.b	#DISP_CELL,d0
+	beq.s	.yes
+	movem.l	a0/a2,-(sp)		; anonymous: up to the next cell
+	move.l	a0,a2
+.g:	move.l	n_Next(a2),d0
+	beq.s	.ge
+	move.l	d0,a0
+	cmp.b	#DN_ELEMENT,n_Type(a0)
+	bne.s	.gn
+	lea	tb_RowStyle(a3),a1
+	bsr	DispOf
+	cmp.b	#DISP_CELL,d0
+	beq.s	.ge
+.gn:	move.l	a0,a2
+	bra.s	.g
+.ge:	move.l	a2,tb_GLast(a3)
+	moveq	#1,d0
+	move.l	d0,tb_Group(a3)
+	movem.l	(sp)+,a0/a2
+	rts
+.html:	move.w	n_Tag(a0),d0
 	cmp.w	#TAG_TD,d0
 	beq.s	.yes
 	cmp.w	#TAG_TH,d0
@@ -1012,7 +1219,16 @@ NumAttr:
 ; RowStyle - style of a row into tb_RowStyle
 ; In: a0 = row, a1 = table style; Out: d0 = 0 if the row is hidden
 RowStyle:
-	movem.l	a2/a5,-(sp)
+	cmp.l	a5,a0			; one row of a CSS table: the table
+	bne.s	.el
+	move.l	tb_Style(a3),a0
+	lea	tb_RowStyle(a3),a1
+	moveq	#STYLE_SIZEOF/4-1,d0
+.c:	move.l	(a0)+,(a1)+
+	dbf	d0,.c
+	moveq	#1,d0
+	rts
+.el:	movem.l	a2/a5,-(sp)
 	move.l	a0,a5
 	lea	tb_RowStyle(a3),a2
 	jsr	StyleOf
@@ -1023,12 +1239,67 @@ RowStyle:
 .x:	movem.l	(sp)+,a2/a5
 	rts
 
-; CellStyle - In: a0 = cell, a1 = row style, a2 = output style
+; CellStyle - In: a0 = cell, a1 = row style, a2 = output style (an
+; anonymous cell: the row's, what is not inherited reset)
 CellStyle:
-	movem.l	a2/a5,-(sp)
+	tst.l	tb_Group(a3)
+	beq.s	.el
+	move.l	a2,a0
+	moveq	#STYLE_SIZEOF/4-1,d0
+.c:	move.l	(a1)+,(a0)+
+	dbf	d0,.c
+	moveq	#-1,d0
+	move.l	d0,st_Bg(a2)
+	move.l	d0,st_Edge(a2)
+	move.l	d0,st_Shadow(a2)
+	clr.l	st_BgImg(a2)
+	clr.l	st_MTop(a2)		; (st_MTop .. st_MRight)
+	clr.l	st_MLeft(a2)
+	clr.l	st_Width(a2)		; (and st_Height)
+	clr.l	st_Pad(a2)
+	move.b	#DISP_BLOCK,st_Display(a2)
+	rts
+.el:	movem.l	a2/a5,-(sp)
 	move.l	a0,a5
 	jsr	StyleOf
 	movem.l	(sp)+,a2/a5
+	rts
+
+;--------------------------------------------------------------------
+; CssTableMode - what a CSS table (display: table, not <table>) is
+; made of: TM_ROWS if a child is a table-row (or row group), else
+; TM_CELLS if one is a table-cell, else 0 (laid out as a block)
+; In: a0 = element, a1 = its style; Out: d0 (CCR set)
+;--------------------------------------------------------------------
+CssTableMode:
+	movem.l	d2/a2-a3/a5,-(sp)
+	lea	-STYLE_SIZEOF(sp),sp
+	move.l	a1,a3
+	move.l	n_First(a0),a5
+	moveq	#0,d2
+.l:	move.l	a5,d0
+	beq.s	.x
+	cmp.b	#DN_ELEMENT,n_Type(a5)
+	bne.s	.n
+	move.l	a5,a0
+	move.l	a3,a1
+	move.l	sp,a2
+	jsr	StyleOf
+	move.b	st_Display(sp),d0
+	cmp.b	#DISP_ROW,d0
+	beq.s	.rows
+	cmp.b	#DISP_ROWGROUP,d0
+	beq.s	.rows
+	cmp.b	#DISP_CELL,d0
+	bne.s	.n
+	moveq	#TM_CELLS,d2
+.n:	move.l	n_Next(a5),a5
+	bra.s	.l
+.rows:	moveq	#TM_ROWS,d2
+.x:	move.l	d2,d0
+	lea	STYLE_SIZEOF(sp),sp
+	movem.l	(sp)+,d2/a2-a3/a5
+	tst.l	d0
 	rts
 
 AnCellspacing:	dc.b	"cellspacing",0
@@ -1066,6 +1337,31 @@ MeasureCell:
 	bsr	MeasBreak
 	move.l	g_MeasMin(a4),d0
 	move.l	g_MeasPref(a4),d1
+	rts
+
+; CellMeasure - (LayoutTable) cell a0, style a1 (an anonymous one: its
+; nodes up to tb_GLast, with the row's style)
+; Out: d0 = minimum width, d1 = preferred width
+CellMeasure:
+	tst.l	tb_Group(a3)
+	beq.s	MeasureCell
+	movem.l	a2,-(sp)
+	clr.l	g_MeasMin(a4)
+	clr.l	g_MeasPref(a4)
+	clr.l	g_MeasLine(a4)
+	move.l	a0,a2
+.l:	move.l	a2,a0
+	lea	tb_RowStyle(a3),a1
+	bsr	MeasureNode
+	cmp.l	tb_GLast(a3),a2
+	beq.s	.d
+	move.l	n_Next(a2),a2
+	move.l	a2,d0
+	bne.s	.l
+.d:	bsr	MeasBreak
+	move.l	g_MeasMin(a4),d0
+	move.l	g_MeasPref(a4),d1
+	movem.l	(sp)+,a2
 	rts
 
 ; MeasBreak - end the current line of the measurement
@@ -1179,9 +1475,26 @@ MeasureNode:
 	beq.s	.inl
 	cmp.b	#DISP_IBLOCK,d0
 	beq.s	.inl
-	cmp.b	#DISP_ROW,d0
+	cmp.b	#DISP_CELL,d0		; a CSS table-cell outside a table
+	bne.s	.ncell
+	move.w	n_Tag(a5),d1
+	cmp.w	#TAG_TD,d1
+	beq.s	.ncell
+	cmp.w	#TAG_TH,d1
+	bne.s	.inl
+.ncell:	cmp.b	#DISP_ROW,d0
 	beq	.row
-	cmp.b	#DISP_FLEX,d0		; a flex row: its items side by side
+	cmp.b	#DISP_TABLE,d0		; a CSS table of one row: as a row
+	bne.s	.nct
+	cmp.w	#TAG_TABLE,n_Tag(a5)
+	beq.s	.blk
+	move.l	a5,a0
+	move.l	a3,a1
+	bsr	CssTableMode
+	cmp.l	#TM_CELLS,d0
+	beq	.row
+	bra.s	.blk
+.nct:	cmp.b	#DISP_FLEX,d0		; a flex row: its items side by side
 	bne.s	.blk
 	btst	#0,st_FlexF(a3)		; (FF_COLUMN: as a block)
 	beq	.frow

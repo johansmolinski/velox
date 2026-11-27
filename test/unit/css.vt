@@ -20,3 +20,5 @@ layout test/unit/layout/flex.html 400
 layout test/unit/layout/flex.html 200
 # a class found after another class it begins with ("pairs pairs--inline")
 layout test/unit/layout/classes.html 400
+# CSS tables: one row, rows in a group, an anonymous cell, fixed, none
+layout test/unit/layout/csstable.html 400

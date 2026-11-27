@@ -1,0 +1,12 @@
+#!/bin/sh
+# checks for imgcss.script: 64x48 images; max-width 15px: 15x11; width
+# 20px with height: auto (width= and height= keep the aspect): 20x15;
+# max-height 12px: 16x12; natural: 64x48
+d=$(dirname "$1"); fail=0
+cat "$d/imgcss.driver"
+for s in 15011 20015 16012 64048; do
+	grep -q "^imgsize $s\$" "$d/imgcss.log" || { echo "no image $s"; fail=1; }
+done
+grep -q '^ok$' "$d/imgcss.driver" || fail=1
+grep -q '^exit rc=0' "$1" || { echo "velox exit code: $(grep exit "$1")"; fail=1; }
+exit $fail

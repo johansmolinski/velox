@@ -36,7 +36,7 @@
 	xref	PageAlloc,DomGetAttr,TagLookup,ToLower,ParseColor,ParseLength
 	xref	StrIPrefix,StrIFind,ParseDec,HttpGetCached,UrlResolve,DecodeCharset
 	xref	BgFind
-	xref	BufFree,GuiStatus
+	xref	BufFree,GuiStatus,LogEvent
 
 MAX_SHEETS	equ	8		; linked style sheets fetched per page
 MAX_SHEET	equ	512*1024
@@ -109,6 +109,8 @@ CP_BASIS	rs.b	1
 CP_GAP		rs.b	1
 CP_COLGAP	rs.b	1
 CP_ROWGAP	rs.b	1
+CP_MAXHEIGHT	rs.b	1
+CP_TLAYOUT	rs.b	1
 CP_COUNT	rs.b	0
 
 	section	code,code
@@ -224,7 +226,11 @@ CssLoad:
 	jsr	GuiStatus
 	lea	g_LinkUrl(a4),a0
 	jsr	HttpGetCached
-	tst.l	d0
+	move.l	d0,-(sp)		; (for tests: "sheet URL STATUS")
+	lea	LogSheet(pc),a0
+	lea	g_LinkUrl(a4),a1
+	jsr	LogEvent
+	move.l	(sp)+,d0
 	beq.s	.fetched
 	cmp.l	#200,d0
 	bne.s	.fetched
@@ -286,6 +292,7 @@ AnStyle:	dc.b	"style",0
 AnId:		dc.b	"id",0
 AnClass:	dc.b	"class",0
 SStylesheet:	dc.b	"stylesheet",0
+LogSheet:	dc.b	"sheet",0
 SAlternate:	dc.b	"alternate",0
 MsgSheet:	dc.b	"Loading style sheet...",0
 	even
@@ -1586,6 +1593,8 @@ PropNames:
 	PN	CP_GAP,"grid-gap"
 	PN	CP_COLGAP,"column-gap"
 	PN	CP_ROWGAP,"row-gap"
+	PN	CP_MAXHEIGHT,"max-height"
+	PN	CP_TLAYOUT,"table-layout"
 	dc.b	0
 	even
 
@@ -3129,7 +3138,7 @@ PropJump:
 	dc.w	PJustify-PropJump,PAlignItems-PropJump,PAlignSelf-PropJump
 	dc.w	PFlex-PropJump,PGrow-PropJump,PShrink-PropJump
 	dc.w	PWidth-PropJump,PGap-PropJump,PColGap-PropJump
-	dc.w	PRowGap-PropJump
+	dc.w	PRowGap-PropJump,PMaxHeight-PropJump,PTLayout-PropJump
 	IFNE	(*-PropJump)-2*CP_COUNT
 	FAIL	"PropJump: one entry per CP_xxx"
 	ENDC
@@ -3461,19 +3470,21 @@ PDisplay:
 .s:	tst.b	(a1)+
 	bne.s	.s
 	bra.s	.l
-.got:	; table display values only make sense on table elements
-	move.w	st_Display(a3),d0	; (high byte: display)
+.got:	; table values: a table's own elements keep theirs; others
+	; are CSS tables (table.s; a cell outside one: side by side)
 	cmp.b	#DISP_TABLE,d2
 	blo.s	.set
 	cmp.b	#DISP_ROWGROUP,d2
 	bhi.s	.set
 	cmp.b	#DISP_IBLOCK,d2
 	beq.s	.set
-	cmp.b	#DISP_CELL,d2		; div cells side by side
-	bne.s	.blk
-	moveq	#DISP_INLINE,d2
-	bra.s	.set
-.blk:	moveq	#DISP_BLOCK,d2
+	move.b	st_Display(a3),d0
+	cmp.b	#DISP_TABLE,d0
+	blo.s	.set
+	cmp.b	#DISP_CAPTION,d0
+	bhi.s	.set
+	cmp.b	#DISP_IBLOCK,d0
+	bne.s	.x
 .set:	cmp.b	#DISP_IBLOCK,d2		; inline-block boxes: inline
 	bne.s	.st
 	moveq	#DISP_INLINE,d2
@@ -3489,6 +3500,8 @@ DisplayKw:
 	dc.b	DISP_ROW,"table-row",0,DISP_CELL,"table-cell",0
 	dc.b	DISP_ROWGROUP,"table-row-group",0,DISP_ROWGROUP,"table-header-group",0
 	dc.b	DISP_ROWGROUP,"table-footer-group",0,DISP_BLOCK,"table-caption",0
+	dc.b	DISP_NONE,"table-column",0,DISP_NONE,"table-column-group",0
+	dc.b	DISP_INLINE,"inline-table",0
 	dc.b	$ff
 	even
 
@@ -3988,7 +4001,23 @@ CssLength:
 .e:	moveq	#0,d1
 	rts
 
-PWidth:	move.l	a2,a0
+PWidth:	cmp.b	#DISP_IBLOCK,st_Display(a3)	; an image: its own pixels
+	bne.s	.css
+	bsr	ImgLen
+	ble.s	.iw
+	move.w	st_Width(a3),d1		; width= and height=: the height
+	ble.s	.iw			; keeps their aspect
+	tst.w	st_Height(a3)
+	ble.s	.iw
+	move.l	d0,-(sp)
+	ext.l	d1
+	mulu.w	st_Height(a3),d0
+	divu.w	d1,d0
+	move.w	d0,st_Height(a3)
+	move.l	(sp)+,d0
+.iw:	move.w	d0,st_Width(a3)
+	bra.s	.hid
+.css:	move.l	a2,a0
 	lea	KwAuto(pc),a1
 	bsr	Kw
 	bne.s	.x
@@ -3997,7 +4026,7 @@ PWidth:	move.l	a2,a0
 	bsr	WidthValue
 	beq.s	.x
 	move.w	d0,st_Width(a3)
-	cmp.w	#1,d0			; 1px wide (visually hidden)
+.hid:	cmp.w	#1,d0			; 1px wide (visually hidden)
 	bgt.s	.x
 	tst.w	d0
 	ble.s	.x
@@ -4005,7 +4034,12 @@ PWidth:	move.l	a2,a0
 .x:	rts
 
 PMaxWidth:
-	move.l	a2,a0
+	cmp.b	#DISP_IBLOCK,st_Display(a3)	; an image: only made smaller
+	bne.s	.css
+	bsr	ImgLen
+	move.w	d0,st_MaxW(a3)
+	rts
+.css:	move.l	a2,a0
 	lea	KwNone(pc),a1
 	bsr	Kw
 	bne.s	.x
@@ -4022,6 +4056,42 @@ PMaxWidth:
 	bge.s	.x
 .set:	move.w	d0,st_Width(a3)
 .x:	rts
+
+; PTLayout - table-layout: fixed (SF_TFIXED)
+PTLayout:
+	bclr	#6,st_Flags(a3)
+	move.l	a2,a0
+	lea	KwFixed(pc),a1
+	bsr	Kw
+	beq.s	.x
+	bset	#6,st_Flags(a3)
+.x:	rts
+
+; PMaxHeight - an image's max-height (only made smaller)
+PMaxHeight:
+	cmp.b	#DISP_IBLOCK,st_Display(a3)
+	bne.s	.x
+	bsr	ImgLen
+	bpl.s	.set
+	moveq	#0,d0			; (percent: none)
+.set:	move.w	d0,st_MaxH(a3)
+.x:	rts
+
+; ImgLen - (PWidth, PHeight, PMaxWidth, PMaxHeight) the length a2 of
+; an image or a control: in its own pixels (not scaled as text is), a
+; percent negative, 0 for auto, none and the like
+; Out: d0 (CCR set)
+ImgLen:	move.l	a2,a0
+	moveq	#CSS_EM,d0
+	jsr	ParseLength
+	tst.l	d1
+	beq.s	.px
+	neg.l	d0
+.px:	cmp.l	#$7fff,d0
+	ble.s	.ok
+	move.l	#$7fff,d0
+.ok:	tst.l	d0
+	rts
 
 ; WidthValue - ParseLength result (d0 value, d1 percent) to the
 ; st_Width encoding (px scaled; percent negative)
@@ -4076,7 +4146,12 @@ PVisibility:
 .x:	rts
 
 PHeight:
-	move.l	a2,a0
+	cmp.b	#DISP_IBLOCK,st_Display(a3)	; an image: its own pixels
+	bne.s	.css
+	bsr	ImgLen
+	ble.s	.css			; (auto, percent: as its width=
+	move.w	d0,st_Height(a3)	;  and height= say)
+.css:	move.l	a2,a0
 	moveq	#CSS_EM,d0
 	jsr	ParseLength
 	tst.l	d1

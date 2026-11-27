@@ -273,3 +273,27 @@ text 10 8 256 10 8 f1 s0 cff0000 "a class after one it begins with"
 text 30 8 32 10 8 f1 s0 c0000ff "blue"
 text 50 8 96 10 8 f1 s0 c000000 "not this one"
 
+# CSS tables: one row, rows in a group, an anonymous cell, fixed, none
+layout test/unit/layout/csstable.html 400 => 
+height 150
+rect 0 8 42 10 0 f0 s0 ccccccc
+text 0 13 32 10 8 f1 s0 c000000 "icon"
+text 0 55 72 10 8 f1 s0 c000000 "main text"
+text 0 347 40 10 8 f1 s0 c000000 "stats"
+text 10 13 16 10 8 f1 s0 c000000 "a1"
+text 10 304 16 10 8 f1 s0 c000000 "b1"
+text 20 13 72 10 8 f1 s0 c000000 "a2 longer"
+text 20 304 16 10 8 f1 s0 c000000 "b2"
+text 30 13 32 10 8 f1 s0 c000000 "icon"
+text 30 50 32 10 8 f1 s0 c000000 "main"
+text 40 50 40 10 8 f1 s0 c000000 "extra"
+text 50 8 40 10 8 f1 s0 c000000 "fixed"
+text 60 8 40 10 8 f1 s0 c000000 "width"
+text 70 8 8 10 8 f1 s0 c000000 "s"
+text 50 48 32 10 8 f1 s0 c000000 "rest"
+text 90 8 64 10 8 f1 s0 c000000 "no cells"
+text 110 8 56 10 8 f1 s0 c000000 "a block"
+text 130 8 40 10 8 f1 s0 c000000 "stray"
+text 130 56 32 10 8 f1 s0 c000000 "cell"
+text 130 96 48 10 8 f1 s0 c000000 "inline"
+

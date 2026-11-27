@@ -965,7 +965,11 @@ PfNode:
 	cmp.w	#TAG_IMG,n_Tag(a2)
 	beq.s	.zap
 	cmp.w	#TAG_SVG,n_Tag(a2)
+	beq.s	.zap
+	cmp.w	#TAG_MARQUEE,n_Tag(a2)	; (a <marquee>: its text)
 	bne.s	.fs
+	bsr	PfFix
+	bra.s	.at
 .zap:
 	bsr	PfZap
 	bra.s	.at

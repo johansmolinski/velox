@@ -77,6 +77,9 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
   tabs below the toolbar, each with its page's icon (favicon: ICO, PNG,
   SVG..., kept in the disk cache at the size shown): a click shows one,
   its close box or the middle button closes it, `+` opens one
+- `<blink>` (and `text-decoration: blink`) and `<marquee>` (`direction`,
+  `behavior=alternate`, `scrollamount`): a timer animates them while
+  the page is shown, and only their rectangles are painted again
 - Image maps: client side (`usemap`, `<area>` rectangles, circles,
   polygons; Tab steps through the areas) and server side (`ismap`)
 - Keyboard navigation for everything; keys typed while a page loads

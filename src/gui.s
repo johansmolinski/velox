@@ -34,6 +34,8 @@
 	xref	PalFree,ImagesStop,ImagesPending,ImagesStep,ImagesFree,ImagePaint
 	xref	KeepFreeAll
 	xref	TaskResume,TaskLoopWait,TaskBusy,TaskAbort,NavStop,ImagesReap,ImagesReapNow,ImagesQuit,FragCheck,TaskNow
+	xref	AnimOpen,AnimClose,AnimCheck,AnimKick
+	xdef	GuiAnimTick,GuiAnimFind
 	xref	TaskPick,TabSelect,TabNew,TabClose,TabNext,TabShow,TabQuit,TabCaption
 	xref	DropInit,DropExit,DropUpdate,DropCheck,DropClick,DropChosen,UrlHook
 	xdef	GetPen
@@ -80,6 +82,7 @@ QUAL_COMMAND	equ	IEQUALIFIER_CONTROL|IEQUALIFIER_LCOMMAND|IEQUALIFIER_RCOMMAND
 ;--------------------------------------------------------------------
 GuiOpen:
 	movem.l	d2/a2,-(sp)
+	jsr	AnimOpen		; (the clock of blink and marquees)
 	lea	g_PubScreen(a4),a0	; a named public screen, or the
 	tst.b	(a0)			; default one
 	beq.s	.def
@@ -201,6 +204,7 @@ MenuTags:	dc.l	GTMN_NewLookMenus,1,TAG_DONE
 ; GuiClose - close everything GuiOpen opened (safe on partial opens)
 ;--------------------------------------------------------------------
 GuiClose:
+	jsr	AnimClose
 	jsr	DropExit		; (its window shares our port: first)
 	bsr	StripFree
 	move.l	g_Window(a4),d0
@@ -724,6 +728,7 @@ GuiRefresh:
 	bne	HidX
 	tst.l	g_Blank(a4)		; a new page loading: blank
 	bne	PaintBlank
+	jsr	AnimKick		; (its blink, marquees: the clock on)
 	tst.l	g_FrN(a4)		; a page of frames: each frame's view
 	beq.s	RefreshView
 	tst.l	g_InFrames(a4)
@@ -1499,6 +1504,219 @@ PaintImage1:
 	rts
 
 ;--------------------------------------------------------------------
+; GuiAnimTick - (anim.s, a tick: the shown tab in G) the page's
+; animations a step further: every 5 ticks blinking text shown or
+; hidden, marquees each tick; only their rectangles painted again (if
+; in view)
+; Out: d0 = 1 if the page has some (CCR set)
+;--------------------------------------------------------------------
+GuiAnimTick:
+	movem.l	d2-d7/a2,-(sp)
+	moveq	#0,d7			; d7 = animated runs seen
+	bsr	AnimOk
+	beq	.x
+	moveq	#0,d6			; d6 = 1: blink turns
+	move.l	g_AnimTicks(a4),d0
+	divul.l	#5,d2:d0
+	tst.l	d2
+	bne.s	.nt
+	not.l	g_BlinkOff(a4)
+	moveq	#1,d6
+.nt:	jsr	RunCount
+	move.l	d0,d5			; d5 = runs, d4 = this one
+	moveq	#0,d4
+.l:	cmp.l	d5,d4
+	bhs.s	.d
+	move.l	d4,d0
+	jsr	RunPtr
+	addq.l	#1,d4
+	move.b	ru_Type(a0),d0
+	cmp.b	#RT_MARQUEE,d0
+	beq.s	.an
+	cmp.b	#RT_TEXT,d0
+	bne.s	.l
+	btst	#4,ru_Soft(a0)		; (SOFT_BLINK)
+	beq.s	.l
+	addq.l	#1,d7
+	tst.l	d6
+	beq.s	.l
+	bra.s	.pt
+.an:	addq.l	#1,d7
+.pt:	move.l	a0,a2			; in view?
+	bsr	RunBox			; d0 = left, d1 = top
+	moveq	#0,d3
+	move.w	ru_H(a2),d3
+	add.l	d1,d3			; bottom
+	cmp.l	g_ScrollY(a4),d3
+	ble.s	.l
+	move.l	g_ScrollY(a4),d2
+	add.l	g_PageH(a4),d2
+	cmp.l	d2,d1
+	bge.s	.l
+	moveq	#0,d2
+	move.w	ru_W(a2),d2
+	add.l	d0,d2			; right
+	bsr	PaintRect
+	bra.s	.l
+.d:	bsr	BandsSync
+.x:	move.l	d7,d0
+	movem.l	(sp)+,d2-d7/a2
+	tst.l	d0
+	rts
+
+; GuiAnimFind - (anim.s, the shown tab in G) has the page blinking text
+; or marquees?  Out: d0 = 1 if so (CCR set)
+GuiAnimFind:
+	movem.l	d2-d3,-(sp)
+	bsr	AnimOk
+	beq.s	.no
+	jsr	RunCount
+	move.l	d0,d3
+	moveq	#0,d2
+.l:	cmp.l	d3,d2
+	bhs.s	.no
+	move.l	d2,d0
+	jsr	RunPtr
+	addq.l	#1,d2
+	cmp.b	#RT_MARQUEE,ru_Type(a0)
+	beq.s	.y
+	cmp.b	#RT_TEXT,ru_Type(a0)
+	bne.s	.l
+	btst	#4,ru_Soft(a0)
+	beq.s	.l
+.y:	moveq	#1,d0
+	bra.s	.x
+.no:	moveq	#0,d0
+.x:	movem.l	(sp)+,d2-d3
+	rts
+
+; AnimOk - may the page in G animate?  (Shown, in a window, laid out;
+; not a page of frames.)  Out: d0 = 1 if so (CCR set)
+AnimOk:	moveq	#0,d0
+	tst.l	g_Window(a4)
+	beq.s	.x
+	tst.l	g_TabHidden(a4)
+	bne.s	.x
+	tst.l	g_Blank(a4)
+	bne.s	.x
+	tst.l	g_FrN(a4)
+	bne.s	.x
+	tst.l	g_ViewLive(a4)
+	beq.s	.x
+	moveq	#1,d0
+.x:	rts
+
+; PaintMarquee - (PaintRun) marquee run a2 at window x d2, y d3 into
+; RastPort a3: its text where the tick puts it, clipped to its box
+; (a region on the RastPort's layer, within the one there)
+PaintMarquee:
+	movem.l	d2-d7/a2/a5,-(sp)
+	move.l	rp_Layer(a3),d0
+	beq	.x
+	move.l	d0,a5			; a5 = the layer
+	moveq	#0,d0			; its font
+	move.b	ru_Soft(a2),d0
+	lsl.w	#8,d0
+	move.b	ru_Font(a2),d0
+	move.l	a3,a1
+	lea	g_PaintFont(a4),a0
+	bsr	SetRPFont
+	move.l	a3,a1			; d4 = the text's width
+	move.l	ru_Text(a2),a0
+	move.l	ru_Len(a2),d0
+	cmp.l	#4000,d0
+	bls.s	.tl
+	move.l	#4000,d0
+.tl:	GFX	TextLength
+	moveq	#0,d4
+	move.w	d0,d4
+	moveq	#0,d5			; d5 = the box's
+	move.w	ru_W(a2),d5
+	moveq	#0,d6			; d6 = how far it went: step x ticks
+	move.b	ru_Flags(a2),d6
+	lsr.b	#3,d6
+	mulu.l	g_AnimTicks(a4),d6
+	btst	#2,ru_Flags(a2)		; RFM_ALT: to and fro
+	bne.s	.alt
+	move.l	d4,d0			; in from one side, out at the other:
+	add.l	d5,d0			; a round is text + box
+	moveq	#0,d1
+	divul.l	d0,d1:d6
+	btst	#1,ru_Flags(a2)		; RFM_RIGHT: x = gone - text
+	beq.s	.left
+	move.l	d1,d7
+	sub.l	d4,d7
+	bra.s	.clip
+.left:	move.l	d5,d7			; x = box - gone
+	sub.l	d1,d7
+	bra.s	.clip
+.alt:	move.l	d5,d7			; the room: |box - text|
+	sub.l	d4,d7
+	bpl.s	.a1
+	neg.l	d7
+.a1:	tst.l	d7
+	beq.s	.clip
+	move.l	d7,d0			; t = gone mod 2 room, back after room
+	add.l	d0,d0
+	moveq	#0,d1
+	divul.l	d0,d1:d6
+	cmp.l	d7,d1
+	bls.s	.a2
+	add.l	d7,d7
+	sub.l	d1,d7
+	move.l	d7,d1
+.a2:	move.l	d1,d7
+	cmp.l	d5,d4			; (text wider than the box: to the left)
+	bls.s	.clip
+	neg.l	d7
+.clip:	GFX	NewRegion		; the box, within the region there
+	tst.l	d0
+	beq	.x
+	move.l	d0,-(sp)
+	lea	g_ClipRect2(a4),a1
+	move.w	d2,ra_MinX(a1)
+	move.w	d3,ra_MinY(a1)
+	move.w	d2,d0
+	add.w	d5,d0
+	subq.w	#1,d0
+	move.w	d0,ra_MaxX(a1)
+	move.w	d3,d0
+	add.w	ru_H(a2),d0
+	subq.w	#1,d0
+	move.w	d0,ra_MaxY(a1)
+	move.l	(sp),a0
+	GFX	OrRectRegion
+	move.l	lr_ClipRegion(a5),d0
+	beq.s	.inst
+	move.l	d0,a0
+	move.l	(sp),a1
+	GFX	AndRegionRegion
+.inst:	move.l	a5,a0
+	move.l	(sp),a1
+	LAYERS	InstallClipRegion
+	move.l	d0,-(sp)		; (the one there)
+	move.l	a3,a1
+	move.l	d2,d0
+	add.l	d7,d0
+	move.l	d3,d1
+	add.w	ru_Base(a2),d1
+	GFX	Move
+	move.l	a3,a1
+	move.l	ru_Text(a2),a0
+	move.l	ru_Len(a2),d0
+	cmp.l	#4000,d0
+	bls.s	.tx
+	move.l	#4000,d0
+.tx:	GFX	Text
+	move.l	a5,a0			; the one there again
+	move.l	(sp)+,a1
+	LAYERS	InstallClipRegion
+	move.l	(sp)+,a0
+	GFX	DisposeRegion
+.x:	movem.l	(sp)+,d2-d7/a2/a5
+	rts
+
+;--------------------------------------------------------------------
 ; PaintRect - repaint the document rectangle d0/d1 - d2/d3 (left/top
 ; inclusive, right/bottom exclusive): only the runs over it, clipped to
 ; it, and only it copied to the window
@@ -1744,7 +1962,11 @@ PaintRun:
 	bne.s	.notw
 	bsr	PaintWidget
 	bra	.x
-.notw:
+.notw:	cmp.b	#RT_MARQUEE,d0
+	bne.s	.notm
+	bsr	PaintMarquee
+	bra	.x
+.notm:
 	; boxes: clamp to the view so coordinates fit in words
 	moveq	#0,d4
 	move.w	ru_W(a2),d4
@@ -1860,7 +2082,11 @@ PaintRun:
 	lea	g_PaintFont(a4),a0
 	bsr	SetRPFont
 	add.w	ru_Base(a2),d3
-	move.l	a3,a1
+	btst	#4,ru_Soft(a2)		; (SOFT_BLINK: hidden now and then)
+	beq.s	.nbl
+	tst.l	g_BlinkOff(a4)
+	bne.s	.bloff
+.nbl:	move.l	a3,a1
 	move.l	d2,d0
 	move.l	d3,d1
 	GFX	Move
@@ -1868,6 +2094,7 @@ PaintRun:
 	move.l	ru_Text(a2),a0
 	move.l	ru_Len(a2),d0
 	GFX	Text
+.bloff:
 	move.l	d3,-(sp)		; the find match, the selection
 	sub.w	ru_Base(a2),d3
 	jsr	FindHighlight
@@ -3658,6 +3885,7 @@ GuiEventLoop:
 	movem.l	d2-d7/a2,-(sp)
 .loop:	tst.l	g_Quit(a4)
 	bne	.x
+	jsr	AnimCheck		; (blink, marquees: a step)
 	bsr	FrontWork		; something for the shown tab?
 	beq.s	.run
 	move.l	g_TabFront(a4),d0
@@ -3718,7 +3946,8 @@ GuiEventLoop:
 	bsr	ProgOff
 .ir:	jsr	ImagesReap		; (a stopped load's decoder)
 	move.l	d0,d2
-	or.l	g_DropSigMask(a4),d0	; (and the address field's keys)
+	or.l	g_DropSigMask(a4),d0	; (and the address field's keys,
+	or.l	g_AnimSig(a4),d0	;  the animations' clock)
 	jsr	TaskLoopWait
 	move.l	d0,d3
 	and.l	g_DropSigMask(a4),d0

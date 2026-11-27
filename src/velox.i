@@ -239,6 +239,8 @@ FONT_COUNT	equ	16
 SOFT_UNDERLINE	equ	1		; = graphics FSF_UNDERLINED
 SOFT_BOLD	equ	2
 SOFT_ITALIC	equ	4
+SOFT_BLINK	equ	$10		; <blink>, text-decoration: blink (not
+					; a graphics style: gui.s, anim.s)
 
 ALIGN_LEFT	equ	0
 ALIGN_CENTER	equ	1
@@ -445,6 +447,8 @@ RT_BULLET	equ	4		; list marker, ru_Len = LIST_xxx
 RT_IMAGE	equ	5		; ru_Text = <img> node
 RT_BOX		equ	6		; 1 pixel outline
 RT_WIDGET	equ	7		; form control, ru_Text = element
+RT_MARQUEE	equ	8		; <marquee>: ru_Text its text, scrolled
+					; (ru_Flags: RFM_xxx)
 
 	RSRESET
 ru_Y		rs.l	1		; top, document coordinates
@@ -463,6 +467,9 @@ ru_Len		rs.l	1
 ru_Link		rs.l	1		; <a> element (or form control)
 RUN_SIZEOF	rs.b	0
 RFB_IBLK	equ	0		; ru_Flags bit (iblock.s)
+RFM_RIGHT	equ	2		; RT_MARQUEE ru_Flags: direction=right,
+RFM_ALT		equ	4		; behavior=alternate, bits 3-7 the step
+					; (px a tick)
 
 	RSRESET				; a box's borders (BorderRects)
 br_Left		rs.l	1
@@ -898,6 +905,13 @@ g_ProfT		rs.l	PROF_SLOTS		; ... when it began,
 g_ProfIO	rs.b	IOTV_SIZE	; ... timer.device
 g_ProfEC	rs.l	2		; ... an EClockVal
 g_ProfHz	rs.l	1		; ... ticks a second
+g_AnimPort	rs.l	1		; anim.s: timer.device's port,
+g_AnimIO	rs.l	1		; ... request (0: none),
+g_AnimSig	rs.l	1		; ... its signal,
+g_AnimPend	rs.l	1		; ... sent, not back yet
+g_AnimTicks	rs.l	1		; ticks of 1/10 s (marquees' places)
+g_BlinkOff	rs.l	1		; blinking text hidden now
+g_ClipRect2	rs.b	ra_SIZEOF	; (gui.s PaintMarquee)
 g_TlX0		rs.l	1		; TileRect: the area (window),
 g_TlY0		rs.l	1
 g_TlX1		rs.l	1

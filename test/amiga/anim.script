@@ -1,0 +1,7 @@
+; anim: <blink> and <marquee> animate (the clock: anim.s), and only
+; their rectangles are painted again
+Echo >VELOX:r/anim.txt "anim"
+Echo >VELOX:r/anim.start ""
+VELOX:velox http://127.0.0.1:8080/anim.html LOG=VELOX:r/anim.log
+Echo >>VELOX:r/anim.txt "exit rc=$RC"
+Echo >>VELOX:r/anim.txt "done"

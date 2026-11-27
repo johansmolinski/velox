@@ -485,6 +485,7 @@ JS is not on the roadmap yet, but it must stay possible to add. That means:
 | edit.s      | editing a field or text area: soft-wrapped lines, moves, selection, undo |
 | flex.s      | flexbox: items in rows (measured as table cells) or columns       |
 | grid.s      | CSS grid: column tracks, items placed by lines, areas or in order |
+| anim.s      | the animations' clock (timer.device): blink, marquees            |
 | iblock.s    | inline-blocks (and floats other than images): one box on a line  |
 | sheetcache.s | linked style sheets kept parsed (rules, custom properties) for the next pages |
 | visits.s    | the pages visited (ENVARC:Velox/Visited), matching a text typed   |
@@ -504,6 +505,20 @@ JS is not on the roadmap yet, but it must stay possible to add. That means:
 | maps.s      | image maps: the area under the mouse, Tab through the areas      |
 
 Everything is tested on AmigaOS 3.1 and 3.2 (see CLAUDE.md).
+
+## Animations
+
+`<blink>` and `text-decoration: blink` set a style bit (SOFT_BLINK) that
+the text runs carry; a `<marquee>` is laid out as one run of its own
+(RT_MARQUEE: its text, gathered once into the page, across its block).
+While the shown page has such runs, anim.s keeps a timer.device request
+of 1/10 s out; the event loop sees it come back (CheckIO, its signal in
+the idle wait), and GuiAnimTick paints only those runs' rectangles again
+(PaintRect): blinking text every half second, marquees each tick, their
+text drawn where the tick count puts it, clipped by a region on the
+strip's layer. The clock stops when the page has nothing animated and a
+repaint starts it again (AnimKick in GuiRefresh). Pages of frames and
+tabs behind do not animate.
 
 ## Images
 

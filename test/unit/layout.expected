@@ -286,3 +286,17 @@ text 128 200 104 10 8 f1 s0 c000000 "placed second"
 text 128 8 96 10 8 f1 s0 c000000 "placed first"
 text 138 8 40 10 8 f1 s0 c000000 "after"
 
+# <blink> and text-decoration: blink (soft style 16), <marquee>: a run
+# of its own across its block, one line (marq), width= kept
+layout test/unit/layout/anim.html 400 => 
+height 84
+text 10 8 48 10 8 f1 s0 c000000 "Before"
+text 10 64 64 10 8 f1 s16 c000000 "blinking"
+text 10 136 24 10 8 f1 s0 c000000 "and"
+text 10 168 72 10 8 f1 s16 c000000 "css blink"
+text 10 240 8 10 8 f1 s0 c000000 "."
+rect 30 8 384 12 0 f0 s0 cffff00
+marq 30 8 384 12 9 f1 s0 c000000
+marq 42 8 200 12 9 f1 s0 c000000
+text 64 8 40 10 8 f1 s0 c000000 "After"
+

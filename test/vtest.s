@@ -1171,11 +1171,18 @@ PageSum:
 	bsr	.mix
 	move.l	SK_STYLE(a3),d0
 	bsr	.mix
-.nst:	cmp.w	#TAG_IMG,n_Tag(a2)
+.nst:	cmp.w	#TAG_IMG,n_Tag(a2)	; (an image, an <svg>: not saved)
+	beq.s	.next
+	cmp.w	#TAG_SVG,n_Tag(a2)
 	beq.s	.next
 	move.l	n_Data2(a2),d0
 	beq.s	.next
-	move.l	d0,a3
+	cmp.w	#TAG_MARQUEE,n_Tag(a2)	; (a <marquee>: its text)
+	bne.s	.fst
+	move.l	d0,a0
+	bsr	.cstr
+	bra.s	.next
+.fst:	move.l	d0,a3
 	move.l	fs_Value(a3),d0
 	beq.s	.nv
 	move.l	d0,a0
@@ -1337,7 +1344,7 @@ PutHex6:
 	rts
 
 RunTypes:	dc.b	"text ",0,"rect ",0,"rule ",0,"bull ",0,"img  ",0,"box  ",0
-		dc.b	"wdgt ",0
+		dc.b	"wdgt ",0,"marq ",0
 MsgHeight:	dc.b	10,"height ",0
 MsgF:		dc.b	"f",0
 MsgS:		dc.b	" s",0

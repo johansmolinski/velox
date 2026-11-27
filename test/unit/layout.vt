@@ -32,3 +32,6 @@ layout test/unit/layout/linkbutton.html 300
 # (auto-fill, minmax()); auto columns from their content, align-items:
 # center; items placed by line before the others
 layout test/unit/layout/grid.html 400
+# <blink> and text-decoration: blink (soft style 16), <marquee>: a run
+# of its own across its block, one line (marq), width= kept
+layout test/unit/layout/anim.html 400

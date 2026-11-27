@@ -208,6 +208,10 @@ StyleCompute:
 	lsr.w	#8,d0
 	and.b	#7,d0
 	or.b	d0,st_Soft(a3)
+	cmp.w	#TAG_BLINK,n_Tag(a5)	; (and <blink>'s)
+	bne.s	.nblink
+	or.b	#SOFT_BLINK,st_Soft(a3)
+.nblink:
 	btst	#14,d2
 	beq.s	.nocenter
 	move.b	#ALIGN_CENTER,st_Align(a3)

@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""Host side of anim.script: screenshots half a second apart differ,
+only in the blinking word's and the marquee's rows."""
+import os
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from xdrive import Amiga, wait_log  # noqa: E402
+
+r = sys.argv[1]
+log = os.path.join(r, "anim.log")
+out = open(os.path.join(r, "anim.driver"), "w")
+try:
+    a = Amiga()
+    wait_log(log, "anim ", timeout=120)
+    time.sleep(2)
+    shots = []
+    for i in range(3):
+        p = os.path.join(r, "anim%d.png" % i)
+        a.shot(p)
+        shots.append(p)
+        time.sleep(0.55)
+    # the rows where two shots differ (PIL: the system's Python)
+    o = subprocess.run(["/usr/bin/python3", "-I", "-c", """
+import sys
+from PIL import Image, ImageChops
+ims = [Image.open(p).convert("RGB") for p in sys.argv[1:]]
+rows = set()
+for a, b in zip(ims, ims[1:]):
+    box = ImageChops.difference(a, b).getbbox()
+    if box:
+        rows.update(range(box[1], box[3]))
+print(min(rows) if rows else -1, max(rows) if rows else -1)
+"""] + shots, capture_output=True, text=True, check=True).stdout.split()
+    lo, hi = int(o[0]), int(o[1])
+    out.write("changed rows %d .. %d\n" % (lo, hi))
+    if lo < 0:
+        raise AssertionError("nothing moved")
+    if hi - lo > 120:
+        raise AssertionError("more than the animated rows changed")
+    out.write("ok\n")
+except Exception as e:
+    out.write("FAIL %r\n" % e)
+Amiga().key("ctrl+q")

@@ -4512,17 +4512,23 @@ PStyle:	move.l	a2,a0
 .it:	or.b	#SOFT_ITALIC,st_Soft(a3)
 .x:	rts
 
-PDeco:	lea	KwUnderline(pc),a1
+PDeco:	lea	KwBlink(pc),a1		; blink (and the rest too)
+	bsr	KwFind
+	beq.s	.nb
+	or.b	#SOFT_BLINK,st_Soft(a3)
+.nb:	lea	KwUnderline(pc),a1
 	bsr	KwFind
 	bne.s	.u
 	move.l	a2,a0
 	lea	KwNone(pc),a1
 	bsr	Kw
 	beq.s	.x
-	and.b	#~SOFT_UNDERLINE,st_Soft(a3)
+	and.b	#~(SOFT_UNDERLINE|SOFT_BLINK),st_Soft(a3)
 	rts
 .u:	or.b	#SOFT_UNDERLINE,st_Soft(a3)
 .x:	rts
+KwBlink:	dc.b	"blink",0
+	even
 
 PSize:	move.l	a2,a0
 	bra	SetFontSize

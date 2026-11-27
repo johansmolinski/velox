@@ -680,8 +680,12 @@ LayoutBlock:
 	jsr	LayoutFlex
 	bra.s	.after
 .ngrid:	cmp.b	#DISP_GRID,st_Display(a3)
-	bne.s	.kids
+	bne.s	.nmarq
 	jsr	LayoutGrid
+	bra.s	.after
+.nmarq:	cmp.w	#TAG_MARQUEE,n_Tag(a5)
+	bne.s	.kids
+	bsr	LayoutMarquee
 	bra.s	.after
 .kids:	bsr	LayoutChildren
 .after:	bsr	FlushLine
@@ -1764,6 +1768,174 @@ PlaceBox:
 	clr.l	g_PendSpace(a4)
 .x:	movem.l	(sp)+,d2-d7
 	rts
+
+;--------------------------------------------------------------------
+; LayoutMarquee - (LayoutBlock) a <marquee>: its text (all of it, on
+; one line) in a run of its own across the block, RT_MARQUEE (gui.s
+; scrolls it while the page is shown: ru_Flags its direction=,
+; behavior=alternate and scrollamount=)
+; In: a0 = the element, a1 = its style
+;--------------------------------------------------------------------
+LayoutMarquee:
+	movem.l	d2-d5/a2-a3/a5,-(sp)
+	move.l	a0,a5
+	move.l	a1,a3
+	bsr	FlushLine
+	bsr	ApplyPendingMargin
+	bsr	MarqText		; a2 = the text, d4 = its length
+	beq	.x
+	moveq	#0,d5			; d5 = flags: direction, behavior,
+	move.l	a5,a0			; step
+	lea	AnDirection(pc),a1
+	jsr	DomGetAttr
+	tst.l	d0
+	beq.s	.nd
+	move.l	d0,a0
+	move.b	(a0),d0			; ("Right" too)
+	or.b	#$20,d0
+	cmp.b	#'r',d0
+	bne.s	.nd
+	moveq	#RFM_RIGHT,d5
+.nd:	move.l	a5,a0
+	lea	AnBehavior(pc),a1
+	jsr	DomGetAttr
+	tst.l	d0
+	beq.s	.nb
+	move.l	d0,a0
+	cmp.b	#'a',(a0)
+	beq.s	.alt
+	cmp.b	#'A',(a0)
+	bne.s	.nb
+.alt:	or.b	#RFM_ALT,d5
+.nb:	moveq	#6,d2			; the step: 6 px, or scrollamount=
+	move.l	a5,a0
+	lea	AnScrollAmt(pc),a1
+	jsr	DomGetAttr
+	tst.l	d0
+	beq.s	.st
+	move.l	d0,a0
+	jsr	ParseDec
+	move.l	d0,d2
+	bgt.s	.s1
+	moveq	#1,d2
+.s1:	cmp.l	#31,d2
+	bls.s	.st
+	moveq	#31,d2
+.st:	lsl.b	#3,d2
+	or.b	d2,d5
+	bsr	AddRun
+	beq.s	.x
+	move.l	d0,a0
+	move.b	#RT_MARQUEE,ru_Type(a0)
+	move.b	d5,ru_Flags(a0)
+	move.l	g_LayLeft(a4),d0
+	move.w	d0,ru_X(a0)
+	move.l	g_LayRight(a4),d1
+	sub.l	d0,d1
+	move.w	d1,ru_W(a0)
+	move.l	g_LayY(a4),ru_Y(a0)
+	moveq	#0,d0			; one line of its font
+	move.b	st_Font(a3),d0
+	move.b	d0,ru_Font(a0)
+	move.b	st_Soft(a3),ru_Soft(a0)
+	add.w	d0,d0
+	lea	g_FontH(a4),a1
+	move.w	(a1,d0.w),d1
+	addq.w	#2,d1
+	move.w	d1,ru_H(a0)
+	lea	g_FontBase(a4),a1
+	move.w	(a1,d0.w),d0
+	addq.w	#1,d0
+	move.w	d0,ru_Base(a0)
+	move.l	st_Color(a3),ru_Color(a0)
+	move.l	a2,ru_Text(a0)
+	move.l	d4,ru_Len(a0)
+	move.l	st_Link(a3),ru_Link(a0)
+	moveq	#0,d0
+	move.w	ru_H(a0),d0
+	add.l	d0,g_LayY(a4)
+.x:	movem.l	(sp)+,d2-d5/a2-a3/a5
+	rts
+
+; MarqText - (LayoutMarquee) the text of <marquee> a5: its text nodes'
+; (blanks collapsed), made once (in the page, its n_Data2)
+; Out: a2 = it, d4 = its length (0: none) (CCR: from d4)
+MarqText:
+	movem.l	d2-d3/a3,-(sp)
+	move.l	n_Data2(a5),d0
+	bne.s	.got
+	moveq	#0,d2			; how long at most: all its text
+	moveq	#0,d3
+	bsr.s	.walk
+	tst.l	d2
+	beq.s	.none
+	move.l	d2,d0
+	addq.l	#1,d0
+	jsr	PageAlloc
+	tst.l	d0
+	beq.s	.none
+	move.l	d0,a2			; then copied
+	moveq	#1,d3
+	bsr.s	.walk
+	clr.b	(a2)
+	move.l	n_Data2(a5),d0
+.got:	move.l	d0,a2
+	moveq	#-1,d4
+.len:	addq.l	#1,d4
+	tst.b	(a2,d4.l)
+	bne.s	.len
+	bra.s	.x
+.none:	moveq	#0,d4
+.x:	movem.l	(sp)+,d2-d3/a3
+	tst.l	d4
+	rts
+; .walk - each text node in a5 (d3 = 0: counted into d2; 1: copied to
+; a2, blanks collapsed, its start in n_Data2)
+.walk:	move.l	n_First(a5),a3
+	tst.l	d3
+	beq.s	.w
+	move.l	a2,n_Data2(a5)
+	moveq	#' ',d1			; (the last: a blank, none first)
+.w:	move.l	a3,d0
+	beq.s	.wx
+	cmp.b	#DN_TEXT,n_Type(a3)
+	bne.s	.down
+	move.l	n_Data(a3),a0
+	move.l	n_Data2(a3),d0
+	tst.l	d3
+	bne.s	.cp
+	add.l	d0,d2
+	bra.s	.next
+.cp:	subq.l	#1,d0
+	bmi.s	.next
+	move.b	(a0)+,d1
+	cmp.b	#' ',d1
+	bhi.s	.put
+	cmp.l	n_Data2(a5),a2		; (one blank, none first)
+	beq.s	.cp
+	cmp.b	#' ',-1(a2)
+	beq.s	.cp
+	moveq	#' ',d1
+.put:	move.b	d1,(a2)+
+	bra.s	.cp
+.down:	move.l	n_First(a3),d0		; elements: their children
+	beq.s	.next
+	move.l	d0,a3
+	bra.s	.w
+.next:	move.l	n_Next(a3),d0		; (back up to a5)
+	bne.s	.nx
+	move.l	n_Parent(a3),a3
+	cmp.l	a5,a3
+	beq.s	.wx
+	bra.s	.next
+.nx:	move.l	d0,a3
+	bra.s	.w
+.wx:	rts
+
+AnDirection:	dc.b	"direction",0
+AnBehavior:	dc.b	"behavior",0
+AnScrollAmt:	dc.b	"scrollamount",0
+	even
 
 ;--------------------------------------------------------------------
 ; Runs

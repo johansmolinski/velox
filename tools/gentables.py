@@ -28,7 +28,7 @@ C, V, R, RC, S, L, N, P = "CLOSEP", "VOID", "RAW", "RCDATA", "SCOPE", "LIST", "N
 TAGS = [
     ("a", []), ("abbr", []), ("address", [C]), ("area", [V]), ("article", [C]),
     ("aside", [C]), ("audio", []), ("b", []), ("base", [V]), ("bdi", []),
-    ("bdo", []), ("big", []), ("blockquote", [C]), ("body", []), ("br", [V]),
+    ("bdo", []), ("big", []), ("blink", []), ("blockquote", [C]), ("body", []), ("br", [V]),
     ("button", [S]), ("canvas", []), ("caption", [S]), ("center", [C]),
     ("cite", []), ("code", []), ("col", [V]), ("colgroup", [N]), ("dd", []),
     ("del", []), ("details", [C]), ("dfn", []), ("dialog", [C]), ("dir", [C, L]),

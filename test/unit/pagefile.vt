@@ -19,3 +19,4 @@ pagefile test/www/third.html 400
 pagefile test/www/big.html 400
 pagefile test/www/busy.html 400
 pagefile test/unit/layout/grid.html 400
+pagefile test/unit/layout/anim.html 400

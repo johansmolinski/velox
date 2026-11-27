@@ -52,8 +52,9 @@ Source
 ------
 
 Velox is free software under the GNU General Public License version 3
-(Velox/LICENSE). Its source is in Velox/Source, and at
-https://github.com/johansmolinski/velox
+(Velox/LICENSE). The source it is built from is in Velox/Source; the
+whole repository, with the test suites and the graphics, is at
+https://github.com/johansmolinski/velox (this version: tag v@VERSION@)
 
 Changes in @VERSION@
 ----------------
@@ -65,5 +66,9 @@ like buttons (a background, padding and an outline behind inline
 elements); text areas edited as in a notepad (the cursor anywhere,
 lines wrapped, Shift selects, undo and redo); address completion (the
 pages visited that match are listed under the address field as you
-type); Velox.guide, this documentation as an AmigaGuide; icons in
-MagicWB's colours.
+type); CSS custom properties (var()), rgb()/hsl() colours with calc(),
+flexbox, CSS tables, inline-blocks, borders, image sizes from CSS,
+table heights; pages shown before their style sheets come; style
+sheets parsed 15 times faster; a missing <body> made as HTML5 does;
+animated GIFs of any size (their first picture); Velox.guide, this
+documentation as an AmigaGuide; icons in MagicWB's colours.

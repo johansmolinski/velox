@@ -98,13 +98,16 @@ release: dist
 	@ls -l build/Velox-$(VERSION).lha build/Velox-$(VERSION).zip
 
 # aminet: build/aminet/velox.lha and velox.readme for Aminet: the dist
-# folder with the source in Velox/Source (the GPL: the committed tree,
-# without the tests); the readme from tools/aminet.readme (its changes
-# section: edit it for each release), checked by tools/aminetcheck.py
+# folder with the source in Velox/Source (the GPL: what it takes to
+# build Velox from the committed tree, AMINET_SRC; the tests and
+# graphics are in the repository, at the version's tag, as the readme
+# says); the readme from tools/aminet.readme (its changes section: edit
+# it for each release), checked by tools/aminetcheck.py
+AMINET_SRC := src tools docs Makefile README.md LICENSE CLAUDE.md
 aminet: dist
 	rm -rf build/aminet && mkdir -p build/aminet/stage/Velox/Source
 	cp -r build/dist/Velox build/dist/Velox.info build/aminet/stage/
-	git archive HEAD -- . ':!test' | tar -x -C build/aminet/stage/Velox/Source
+	git archive HEAD -- $(AMINET_SRC) | tar -x -C build/aminet/stage/Velox/Source
 	python3 tools/mklha.py build/aminet/velox.lha build/aminet/stage/Velox build/aminet/stage/Velox.info
 	sed -e 's/@VERSION@/$(VERSION)/g' -e "s/@AUTHOR@/$$(git config user.name) ($$(git config user.email))/g" tools/aminet.readme >build/aminet/velox.readme
 	python3 tools/aminetcheck.py build/aminet/velox.lha build/aminet/velox.readme

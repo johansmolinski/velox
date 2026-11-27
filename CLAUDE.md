@@ -9,7 +9,9 @@ and a single event dispatch point.
 
 - `make`: assembles `src/*.s` into `build/velox` (Amiga hunk executable)
 - `make aminet`: `build/aminet/velox.lha` (the dist folder with the
-  source in `Velox/Source`, as the GPL wants) and `velox.readme` from
+  source in `Velox/Source`, as the GPL wants: what it takes to build
+  Velox, `AMINET_SRC` in the Makefile; the readme points to the
+  repository's version tag for the tests and graphics) and `velox.readme` from
   `tools/aminet.readme` (edit its changes section for each release),
   checked against Aminet's rules by `tools/aminetcheck.py`. Upload both
   to ftp://main.aminet.net/new (anonymous). The archives are written

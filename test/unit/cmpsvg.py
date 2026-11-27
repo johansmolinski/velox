@@ -3,8 +3,7 @@
 height.l, ARGB pixels) with rsvg-convert's (test/unit/svg/NAME.W.png).
 Edges are anti-aliased differently, so: the shapes (alpha >= 128, as
 Velox shows them) may differ in a few pixels, and the colours where both
-are opaque only a little.  Gradients are one colour in Velox: only
-their shape is compared."""
+are opaque only a little."""
 import glob
 import os
 import struct
@@ -43,7 +42,7 @@ for out in sorted(glob.glob(os.path.join(d, "*.argb"))):
     edge = differ / max(shape, 1)
     col = cdiff / max(cn, 1)
     # (small ones: their edges are much of them)
-    ok = edge <= 0.03 and (col <= (6 if w * h > 1024 else 12) or name.startswith("gradient"))
+    ok = edge <= 0.03 and col <= (6 if w * h > 1024 else 12)
     print("%s %s %dx%d shape %.1f%% colour %.1f" % ("PASS" if ok else "FAIL", name, w, h, 100 * edge, col))
     fail |= not ok
 sys.exit(fail)

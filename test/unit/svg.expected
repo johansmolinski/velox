@@ -10,5 +10,5 @@ decode test/unit/svg/styled.svg build/svg/styled.0.argb => info 64x64 decoded 64
 decode test/unit/svg/styled.svg build/svg/styled.16.argb 16 => info 64x64 decoded 16x16
 decode test/unit/svg/icon.svg build/svg/icon.32.argb 32 => info 512x512 decoded 32x32
 decode test/unit/svg/icon.svg build/svg/icon.200.argb 200 => info 512x512 decoded 200x200
-decode test/unit/svg/gradient.svg build/svg/gradient.0.argb => info 80x40 decoded 80x40
+decode test/unit/svg/gradient.svg build/svg/gradient.0.argb => info 160x80 decoded 160x80
 decode test/unit/svg/use.svg build/svg/use.240.argb 240 => info 120x60 decoded 240x120

@@ -11,10 +11,12 @@
 ; inherits.  Style: fill, stroke, stroke-width, opacity, fill-opacity,
 ; stroke-opacity, fill-rule; from attributes, then class rules of the
 ; file's <style> (.name {...}), then style="".  Colours: #rgb,
-; #rrggbb, rgb(), some names; currentColor is black; url(#id) is the
-; gradient's stops' colour, mixed.  Not drawn: what is in <defs>,
+; #rrggbb, rgb(), some names; currentColor from color; url(#id): a
+; linear or radial gradient (its stops, their opacity, its units, the
+; stops of the one its href names).  <use> draws the element it names
+; there (a <symbol>: its viewBox fitted).  Not drawn: what is in <defs>,
 ; <symbol>, <clipPath>, <mask>, <pattern>, <marker>, <title>, <desc>,
-; <text>, <image>, <use>, and elements with display="none".
+; <text>, <image>, and elements with display="none".
 ;
 ; Arithmetic is fixed point: user coordinates and the transform 16.16,
 ; device coordinates 24.8.  Curves are flattened (de Casteljau); arcs
@@ -40,7 +42,8 @@ MAXSUBS		equ	1024		; its subpaths
 MAXDEPTH	equ	24		; nested groups kept
 MAXATTRS	equ	40		; attributes of an element
 MAXCLASS	equ	48		; class rules
-MAXGRAD		equ	32		; gradients (their colour)
+MAXGRAD		equ	32		; gradients
+MAXSTOPS	equ	8		; ... their stops
 VALMAX		equ	4096		; an attribute value copied
 FIX1		equ	$10000		; 1.0 (16.16)
 TWOPI		equ	411775		; (16.16)
@@ -87,6 +90,23 @@ cr_Decl		rs.l	1		; declarations / the colour
 cr_DL		rs.l	1
 CR_SIZEOF	rs.b	0
 
+	RSRESET				; a gradient
+gd_Id		rs.l	1		; its id (in the text), its length
+gd_IdL		rs.l	1
+gd_Radial	rs.l	1		; radial (else linear)
+gd_User		rs.l	1		; gradientUnits="userSpaceOnUse"
+gd_X1		rs.l	1		; x1 y1 x2 y2 (16.16; of the shape's box
+gd_Y1		rs.l	1		; unless gd_User); radial: cx cy r
+gd_X2		rs.l	1
+gd_Y2		rs.l	1
+gd_Href		rs.l	1		; href="#id": its stops (if none), id,
+gd_HrefL	rs.l	1		; length
+gd_N		rs.l	1		; stops
+gd_Off		rs.l	MAXSTOPS	; ... at (0 - 256)
+gd_Col		rs.l	MAXSTOPS	; ... their colours ($AARRGGBB)
+GD_SIZEOF	rs.b	0
+GRAD		equ	$40000000	; a paint: a gradient (+ its index)
+
 	RSRESET				; the context (a5)
 sc_Text		rs.l	1		; the file
 sc_End		rs.l	1
@@ -115,9 +135,17 @@ sc_Skip		rs.l	1		; depth of a subtree passed over
 sc_Defs		rs.l	1		; depth of <defs> (gradients there)
 sc_Class	rs.b	CR_SIZEOF*MAXCLASS
 sc_NClass	rs.l	1
-sc_Grad		rs.b	CR_SIZEOF*MAXGRAD	; (cr_Decl: colour,
-sc_NGrad	rs.l	1			;  cr_DL: stops)
-sc_InGrad	rs.l	1		; a gradient open: its index + 1
+sc_Grad		rs.b	GD_SIZEOF*MAXGRAD
+sc_NGrad	rs.l	1
+sc_RGrad	rs.l	1		; the paint: a gradient (sc_Lut), 1
+					; linear, 2 radial, 0 none
+sc_Lut		rs.l	256		; ... its colours ($AARRGGBB)
+sc_GX		rs.l	1		; ... (28.4 device) linear: from, its
+sc_GY		rs.l	1		; vector; radial: centre, radius
+sc_GDX		rs.l	1
+sc_GDY		rs.l	1
+sc_GL2		rs.l	1		; ... linear: the vector's length^2
+sc_GB		rs.l	1		; ... its colour index a pixel (16.16)
 sc_CurX		rs.l	1		; the path: current point,
 sc_CurY		rs.l	1
 sc_StX		rs.l	1		; subpath start,
@@ -473,7 +501,8 @@ Draw:	movem.l	d2/a2,-(sp)
 	move.l	#256,gs_Op(a0)
 	clr.l	gs_Rule(a0)
 	bsr	ViewBox
-	bsr	ReadStyles		; the <style>s first (rules for all)
+	bsr	ReadStyles		; the <style>s first (rules for all),
+	bsr	ReadGrads		; the gradients
 	move.l	sc_Text(a5),a0
 	move.l	sc_End(a5),a1
 	bsr	DrawRange
@@ -857,17 +886,10 @@ StartTag:
 	lea	sc_Tag(a5),a0
 	addq.l	#1,sc_Skip(a5)
 	bra.s	.x
-.go:	lea	NStop(pc),a0		; a gradient's stops (also in <defs>)
-	bsr	TagIs
-	beq.s	.nstop
-	bsr	GradStop
-	bra.s	.x
-.nstop:	lea	GradTags(pc),a2
+.go:	lea	GradTags(pc),a2		; gradients (ReadGrads): passed over
 	bsr	TagIn
-	beq.s	.ngrad
-	bsr	GradStart
-	bra.s	.x
-.ngrad:	tst.l	sc_Defs(a5)		; in <defs>: nothing drawn
+	bne	.skip
+	tst.l	sc_Defs(a5)		; in <defs>: nothing drawn
 	bne.s	.defs
 	lea	NDefs(pc),a0
 	bsr	TagIs
@@ -910,15 +932,7 @@ EndTag:	move.l	a2,-(sp)
 	beq.s	.ns
 	subq.l	#1,sc_Skip(a5)
 	bra.s	.x
-.ns:	lea	NStop(pc),a0		; (</stop>: nothing)
-	bsr	TagIs
-	bne.s	.x
-	lea	GradTags(pc),a2
-	bsr	TagIn
-	beq.s	.ng
-	clr.l	sc_InGrad(a5)
-	bra.s	.x
-.ng:	tst.l	sc_Defs(a5)		; (in <defs>: all counted)
+.ns:	tst.l	sc_Defs(a5)		; (in <defs>: all counted)
 	beq.s	.nd
 	subq.l	#1,sc_Defs(a5)
 	bra.s	.x
@@ -1084,83 +1098,33 @@ NPoints:	dc.b	"points",0
 ; Gradients: their colour (the first and last stops mixed)
 ;--------------------------------------------------------------------
 
-; GradStart - (StartTag) <linearGradient id=...>: a new one
-GradStart:
-	clr.l	sc_InGrad(a5)
-	move.l	sc_NGrad(a5),d0
-	cmp.l	#MAXGRAD,d0
-	bhs.s	.x
-	lea	NId(pc),a0
-	bsr	AttrRaw			; a0 = the id in the text, d1 its length
-	beq.s	.x
-	move.l	sc_NGrad(a5),d0
-	mulu.w	#CR_SIZEOF,d0
-	lea	sc_Grad(a5,d0.l),a1
-	move.l	a0,cr_Name(a1)
-	move.l	d1,cr_NL(a1)
-	moveq	#-1,d0			; (no stops yet)
-	move.l	d0,cr_Decl(a1)
-	move.l	d0,cr_DL(a1)
-	addq.l	#1,sc_NGrad(a5)
-	move.l	sc_NGrad(a5),sc_InGrad(a5)
-.x:	tst.l	sc_Empty(a5)		; (<.../>: none open)
-	beq.s	.r
-	clr.l	sc_InGrad(a5)
-.r:	rts
-
-; GradStop - (StartTag) a <stop>: its stop-color (attribute or style);
-; the gradient's colour is its first and last stops' mixed
-GradStop:
-	move.l	sc_InGrad(a5),d0
-	beq.s	.x
-	lea	NStopColor(pc),a0
-	bsr	Attr
-	bne.s	.c
-	lea	NStyle(pc),a0		; style="stop-color: ..."
-	bsr	Attr
-	beq.s	.x
-	move.l	d0,a0
-	lea	NStopColor(pc),a1
-	bsr	StyleProp
-	beq.s	.x
-	move.l	a0,d0
-.c:	move.l	d0,a0
-	bsr	Colour
-	bmi.s	.x
-	move.l	sc_InGrad(a5),d1
-	subq.l	#1,d1
-	mulu.w	#CR_SIZEOF,d1
-	lea	sc_Grad(a5,d1.l),a1
-	tst.l	cr_Decl(a1)		; the first
-	bpl.s	.l
-	move.l	d0,cr_Decl(a1)
-.l:	move.l	d0,cr_DL(a1)		; the last
-.x:	rts
-
 NStopColor:	dc.b	"stop-color",0
+NStopOp:	dc.b	"stop-opacity",0
+NOffset:	dc.b	"offset",0
+NUnits:		dc.b	"gradientUnits",0
+NX2b:		dc.b	"x2",0
 	even
 
-; GradColour - the colour of gradient url(#id) at a0 ("url(#" passed)
-; Out: d0 = it, or -1 (CCR set)
-GradColour:
+; GradFind - the gradient of url(#id) at a0 ("url(#" passed)
+; Out: d0 = its index, or -1 (CCR set)
+GradFind:
 	movem.l	d2/a2-a3,-(sp)
 	move.l	a0,a3
 	lea	sc_Grad(a5),a2
-	move.l	sc_NGrad(a5),d2
-	bra.s	.e
-.l:	move.l	cr_Name(a2),a0
-	move.l	cr_NL(a2),d1
+	moveq	#0,d2
+.l:	cmp.l	sc_NGrad(a5),d2
+	bhs.s	.no
+	move.l	gd_Id(a2),a0
+	move.l	gd_IdL(a2),d1
 	move.l	a3,a1			; the id, to its ')'
 	bsr	SameId
 	bne.s	.got
-	lea	CR_SIZEOF(a2),a2
-.e:	dbf	d2,.l
-	moveq	#-1,d0
+	lea	GD_SIZEOF(a2),a2
+	addq.l	#1,d2
+	bra.s	.l
+.no:	moveq	#-1,d0
 	bra.s	.x
-.got:	move.l	cr_Decl(a2),d0		; (no stops: none)
-	bmi.s	.x
-	move.l	cr_DL(a2),d1
-	bsr	Mix
+.got:	move.l	d2,d0
 .x:	movem.l	(sp)+,d2/a2-a3
 	tst.l	d0
 	rts
@@ -1187,14 +1151,6 @@ SameId:
 	moveq	#0,d0
 	rts
 .y:	moveq	#1,d0
-	rts
-
-; Mix - colours d0 and d1 half and half; Out: d0 (d1 changed)
-Mix:	lsr.l	#1,d0
-	and.l	#$7f7f7f,d0
-	lsr.l	#1,d1
-	and.l	#$7f7f7f,d1
-	add.l	d1,d0
 	rts
 
 ; StyleProp - property a1 (NUL ended) in style text a0 ("a: b; c: d")
@@ -1482,7 +1438,8 @@ Opacity:
 	rts
 
 ; Paint - a fill or stroke value at a0: a colour, none, url(#id)
-; Out: d0 = $00RRGGBB, -1 none, -2 not understood (a1 kept)
+; Out: d0 = $00RRGGBB, GRAD + a gradient, -1 none, -2 not understood
+;      (a1 kept)
 Paint:	move.l	a1,-(sp)
 	bsr	SkipB
 	lea	NNone(pc),a1
@@ -1496,9 +1453,21 @@ Paint:	move.l	a1,-(sp)
 .ncur:	lea	SUrl(pc),a1
 	bsr	KwAt
 	beq.s	.c
-	bsr	GradColour		; (a0 after "url(#")
-	bpl.s	.x
-	moveq	#0,d0			; (a gradient not found: black)
+	bsr	GradFind		; (a0 after "url(#")
+	bmi.s	.blk
+	move.l	d0,d1			; its stops: none, one (that colour)
+	mulu.w	#GD_SIZEOF,d1		; or more (the gradient)
+	lea	sc_Grad(a5,d1.l),a1
+	move.l	gd_N(a1),d1
+	beq.s	.none
+	cmp.l	#1,d1
+	bne.s	.g
+	move.l	gd_Col(a1),d0
+	and.l	#$ffffff,d0
+	bra.s	.x
+.g:	or.l	#GRAD,d0
+	bra.s	.x
+.blk:	moveq	#0,d0			; (a gradient not found: black)
 	bra.s	.x
 .c:	bsr	Colour
 	bpl.s	.x
@@ -2960,7 +2929,11 @@ FillShape:
 	move.l	sc_St+gs_Fill(a5),d0
 	bmi	.x
 	move.l	d0,sc_RCol(a5)
-	move.l	sc_St+gs_FOp(a5),d0
+	clr.l	sc_RGrad(a5)
+	btst	#30,d0			; (GRAD: a gradient)
+	beq.s	.ng
+	bsr	SetupGrad
+.ng:	move.l	sc_St+gs_FOp(a5),d0
 	bsr	OpOf
 	beq	.x
 	move.l	sc_St+gs_Rule(a5),sc_RRule(a5)
@@ -3245,6 +3218,7 @@ Span:	movem.l	d2-d4,-(sp)
 ; sc_RCol at coverage x sc_ROp, over what is there
 PaintRow:
 	movem.l	d2-d7/a2,-(sp)
+	move.l	d0,d4			; d4 = row
 	move.l	sc_Cov(a5),a2
 	move.l	g_PicData(a4),a1
 	mulu.l	sc_W(a5),d0
@@ -3254,6 +3228,11 @@ PaintRow:
 	move.l	sc_ROp(a5),d6
 	move.l	sc_W(a5),d5
 	subq.l	#1,d5
+	moveq	#8,d2			; d2 = x (28.4), d3 = linear index
+	moveq	#0,d3
+	cmp.l	#1,sc_RGrad(a5)
+	bne.s	.l
+	bsr	GradRow
 .l:	moveq	#0,d0
 	move.w	(a2)+,d0
 	beq.s	.n
@@ -3261,8 +3240,12 @@ PaintRow:
 	lsr.l	#8,d0
 	beq.s	.n
 	cmp.l	#255,d0
-	bls.s	.a
+	bls.s	.g
 	move.l	#255,d0
+.g:	tst.l	sc_RGrad(a5)		; (a gradient: its colour there)
+	beq.s	.a
+	bsr	GradPixel
+	beq.s	.n
 .a:	move.l	(a1),d1
 	rol.l	#8,d1			; da (its alpha)
 	tst.b	d1
@@ -3275,6 +3258,8 @@ PaintRow:
 	or.l	d7,d0
 	move.l	d0,(a1)
 .n:	addq.l	#4,a1
+	add.l	#16,d2
+	add.l	sc_GB(a5),d3
 	dbf	d5,.l
 	movem.l	(sp)+,d2-d7/a2
 	rts
@@ -3327,6 +3312,12 @@ StrokeShape:
 	move.l	gs_Stroke(a2),d0
 	bmi	.x
 	move.l	d0,sc_RCol(a5)
+	clr.l	sc_RGrad(a5)
+	btst	#30,d0			; (GRAD: a gradient)
+	beq.s	.ng
+	bsr	SetupGrad
+	lea	sc_St(a5),a2
+.ng:
 	move.l	gs_SW(a2),d7
 	ble	.x
 	move.l	gs_SOp(a2),d0
@@ -4165,3 +4156,587 @@ SymBox:	movem.l	d6-d7,-(sp)
 
 NSymbol:	dc.b	"symbol",0
 	even
+
+;--------------------------------------------------------------------
+; Gradients (linear, radial): read first (ReadGrads), then a shape with
+; one as its paint has its colours from it (SetupGrad, PaintRow); in
+; 28.4 device units (sizes to 2048 pixels), spread: pad
+;--------------------------------------------------------------------
+
+; ReadGrads - (Draw) the file's gradients: their geometry, units,
+; stops; those without stops get those of the one they name (href)
+ReadGrads:
+	movem.l	d2/a2-a3,-(sp)
+	clr.l	sc_NGrad(a5)
+	sub.l	a3,a3			; a3 = the one open (its stops follow)
+	move.l	sc_Text(a5),d2		; d2 = where
+.l:	move.l	d2,a0
+	bsr	NextTag
+	beq	.done
+	move.l	a0,d2
+	tst.l	d0
+	bmi.s	.end
+	lea	NStop(pc),a0		; a stop of the one open
+	bsr	TagIs
+	beq.s	.ns
+	move.l	a3,d0
+	beq.s	.l
+	bsr	ReadStop
+	bra.s	.l
+.ns:	lea	GradTags(pc),a2
+	bsr	TagIn
+	beq.s	.l
+	sub.l	a3,a3
+	bsr	ReadGrad		; a3 = it (0: no room)
+	tst.l	sc_Empty(a5)		; (<.../>: no stops)
+	beq.s	.l
+	sub.l	a3,a3
+	bra.s	.l
+.end:	lea	GradTags(pc),a2		; its end
+	bsr	TagIn
+	beq.s	.l
+	sub.l	a3,a3
+	bra.s	.l
+.done:	moveq	#1,d2			; the stops of those named (twice:
+.h:	bsr	GradHrefs		;  a chain of two)
+	dbf	d2,.h
+	movem.l	(sp)+,d2/a2-a3
+	rts
+
+; ReadGrad - (ReadGrads) a <linearGradient> or <radialGradient>: a new
+; one (defaults: x1 0, y1 0, x2 100%, y2 0; cx cy r 50%)
+; Out: a3 = it, or 0 if there is no room
+ReadGrad:
+	move.l	sc_NGrad(a5),d0
+	cmp.l	#MAXGRAD,d0
+	bhs	.no
+	addq.l	#1,sc_NGrad(a5)
+	mulu.w	#GD_SIZEOF,d0
+	lea	sc_Grad(a5,d0.l),a3
+	move.l	a3,a0
+	moveq	#GD_SIZEOF/4-1,d0
+.c:	clr.l	(a0)+
+	dbf	d0,.c
+	lea	NId(pc),a0
+	bsr	AttrRaw
+	beq.s	.ni
+	move.l	a0,gd_Id(a3)
+	move.l	d1,gd_IdL(a3)
+.ni:	lea	NHref(pc),a0		; href="#id"
+	bsr	AttrRaw
+	bne.s	.hr
+	lea	NXHref(pc),a0
+	bsr	AttrRaw
+	beq.s	.nh
+.hr:	cmp.b	#'#',(a0)+
+	bne.s	.nh
+	subq.l	#1,d1
+	move.l	a0,gd_Href(a3)
+	move.l	d1,gd_HrefL(a3)
+.nh:	lea	NUnits(pc),a0		; gradientUnits="userSpaceOnUse"
+	bsr	Attr
+	beq.s	.nu
+	move.l	d0,a0
+	cmp.b	#'u',(a0)
+	bne.s	.nu
+	moveq	#1,d0
+	move.l	d0,gd_User(a3)
+.nu:	lea	NRadial(pc),a0
+	bsr	TagIs
+	beq.s	.lin
+	moveq	#1,d0
+	move.l	d0,gd_Radial(a3)
+	move.l	#FIX1/2,d0		; cx, cy, r
+	move.l	d0,gd_X1(a3)
+	move.l	d0,gd_Y1(a3)
+	move.l	d0,gd_X2(a3)
+	lea	NCx(pc),a0
+	lea	gd_X1(a3),a1
+	bsr	Coord
+	lea	NCy(pc),a0
+	lea	gd_Y1(a3),a1
+	bsr	Coord
+	lea	NR(pc),a0
+	lea	gd_X2(a3),a1
+	bsr	Coord
+	rts
+.lin:	move.l	#FIX1,gd_X2(a3)		; x1 y1 x2 y2
+	lea	NX1(pc),a0
+	lea	gd_X1(a3),a1
+	bsr	Coord
+	lea	NY1(pc),a0
+	lea	gd_Y1(a3),a1
+	bsr	Coord
+	lea	NX2(pc),a0
+	lea	gd_X2(a3),a1
+	bsr	Coord
+	lea	NY2(pc),a0
+	lea	gd_Y2(a3),a1
+	bra	Coord
+.no:	sub.l	a3,a3
+	rts
+
+; Coord - attribute a0 (a number, or a percent: its fraction) into a1
+; if there is one (16.16)
+Coord:	move.l	a1,-(sp)
+	bsr	Attr
+	beq.s	.x
+	move.l	d0,a0
+	bsr	Num
+	beq.s	.x
+	cmp.b	#'%',(a0)
+	bne.s	.s
+	divs.l	#100,d0
+.s:	move.l	(sp),a1
+	move.l	d0,(a1)
+.x:	addq.l	#4,sp
+	rts
+
+; ReadStop - (ReadGrads) a <stop> of gradient a3: its offset (not
+; before the one before), stop-color, stop-opacity (attributes or
+; style)
+ReadStop:
+	movem.l	d2-d3,-(sp)
+	move.l	gd_N(a3),d0
+	cmp.l	#MAXSTOPS,d0
+	bhs	.x
+	moveq	#0,d2			; d2 = offset (0 - 256)
+	lea	NOffset(pc),a0
+	bsr	Attr
+	beq.s	.o
+	move.l	d0,a0
+	bsr	Num
+	cmp.b	#'%',(a0)
+	bne.s	.of
+	divs.l	#100,d0
+.of:	lsr.l	#8,d0			; (16.16 to 0 - 256)
+	bpl.s	.o1
+	moveq	#0,d0
+.o1:	cmp.l	#256,d0
+	bls.s	.o2
+	move.l	#256,d0
+.o2:	move.l	d0,d2
+.o:	move.l	gd_N(a3),d0		; (not before the one before)
+	beq.s	.oo
+	lea	gd_Off(a3),a0
+	cmp.l	-4(a0,d0.l*4),d2
+	bge.s	.oo
+	move.l	-4(a0,d0.l*4),d2
+.oo:	moveq	#0,d3			; d3 = colour (black)
+	lea	NStopColor(pc),a0
+	bsr	StopProp
+	beq.s	.nc
+	bsr	Colour
+	bmi.s	.nc
+	move.l	d0,d3
+.nc:	move.l	#256,-(sp)		; its opacity
+	lea	NStopOp(pc),a0
+	bsr	StopProp
+	beq.s	.no
+	bsr	Opacity
+	bmi.s	.no
+	move.l	d0,(sp)
+.no:	move.l	(sp)+,d1
+	mulu.w	#255,d1			; alpha 0 - 255
+	lsr.l	#8,d1
+	ror.l	#8,d1
+	or.l	d1,d3
+	move.l	gd_N(a3),d0
+	lea	gd_Off(a3),a0
+	move.l	d2,(a0,d0.l*4)
+	lea	gd_Col(a3),a0
+	move.l	d3,(a0,d0.l*4)
+	addq.l	#1,gd_N(a3)
+.x:	movem.l	(sp)+,d2-d3
+	rts
+
+; StopProp - (ReadStop) property a0 of the <stop>: its attribute, else
+; in its style=""
+; Out: a0 = the value; Z set if there is none
+StopProp:
+	move.l	a0,-(sp)
+	bsr	Attr
+	bne.s	.a
+	lea	NStyle(pc),a0
+	bsr	Attr
+	beq.s	.no
+	move.l	d0,a0
+	move.l	(sp),a1
+	bsr	StyleProp
+	beq.s	.no
+	addq.l	#4,sp
+	moveq	#1,d0
+	rts
+.a:	move.l	d0,a0
+	addq.l	#4,sp
+	moveq	#1,d0
+	rts
+.no:	addq.l	#4,sp
+	moveq	#0,d0
+	rts
+
+; GradHrefs - (ReadGrads) a gradient without stops takes those of the
+; one its href names
+GradHrefs:
+	movem.l	d2-d3/a2-a3,-(sp)
+	lea	sc_Grad(a5),a3
+	moveq	#0,d2
+.l:	cmp.l	sc_NGrad(a5),d2
+	bhs.s	.x
+	tst.l	gd_N(a3)
+	bne.s	.n
+	move.l	gd_Href(a3),d0
+	beq.s	.n
+	move.l	d0,a0			; find it: url(#..) form (to a quote
+	bsr	GradFind		;  or the end of its id)
+	bmi.s	.n
+	mulu.w	#GD_SIZEOF,d0
+	lea	sc_Grad(a5,d0.l),a2
+	move.l	gd_N(a2),gd_N(a3)	; its stops
+	lea	gd_Off(a2),a0
+	lea	gd_Off(a3),a1
+	moveq	#2*MAXSTOPS-1,d0
+.c:	move.l	(a0)+,(a1)+
+	dbf	d0,.c
+.n:	lea	GD_SIZEOF(a3),a3
+	addq.l	#1,d2
+	bra.s	.l
+.x:	movem.l	(sp)+,d2-d3/a2-a3
+	rts
+
+NRadial:	dc.b	"radialGradient",0
+	even
+
+; SetupGrad - (FillShape, StrokeShape) paint d0 (GRAD + a gradient):
+; its colours (sc_Lut) and where they go for the outline there
+; (sc_GX ...; sc_RGrad), or one colour (sc_RCol) if it cannot be
+SetupGrad:
+	movem.l	d2-d7/a2,-(sp)
+	and.l	#$ffff,d0
+	mulu.w	#GD_SIZEOF,d0
+	lea	sc_Grad(a5,d0.l),a2
+	bsr	GradLut
+	clr.l	sc_RGrad(a5)
+	move.l	sc_Lut+128*4(a5),d0	; (one colour: the middle one)
+	and.l	#$ffffff,d0
+	move.l	d0,sc_RCol(a5)
+	bsr	PtsBox			; d2 d3 d4 d5: the outline's box (24.8)
+	tst.l	gd_User(a2)
+	bne.s	.user
+	move.l	d4,d6			; the box's size
+	sub.l	d2,d6
+	move.l	d5,d7
+	sub.l	d3,d7
+	move.l	gd_X1(a2),d0		; (u, v) of the box
+	move.l	d6,d1
+	bsr	XMul
+	add.l	d2,d0
+	move.l	d0,sc_GX(a5)
+	move.l	gd_Y1(a2),d0
+	move.l	d7,d1
+	bsr	XMul
+	add.l	d3,d0
+	move.l	d0,sc_GY(a5)
+	tst.l	gd_Radial(a2)
+	bne.s	.brad
+	move.l	gd_X2(a2),d0
+	move.l	d6,d1
+	bsr	XMul
+	add.l	d2,d0
+	move.l	d0,sc_GDX(a5)
+	move.l	gd_Y2(a2),d0
+	move.l	d7,d1
+	bsr	XMul
+	add.l	d3,d0
+	move.l	d0,sc_GDY(a5)
+	bra.s	.dev
+.brad:	add.l	d7,d6			; r x (w + h) / 2
+	asr.l	#1,d6
+	move.l	gd_X2(a2),d0
+	move.l	d6,d1
+	bsr	XMul
+	move.l	d0,sc_GDX(a5)
+	bra.s	.dev
+.user:	move.l	gd_X1(a2),d0		; through the transform
+	move.l	gd_Y1(a2),d1
+	bsr	Dev
+	move.l	d0,sc_GX(a5)
+	move.l	d1,sc_GY(a5)
+	tst.l	gd_Radial(a2)
+	bne.s	.urad
+	move.l	gd_X2(a2),d0
+	move.l	gd_Y2(a2),d1
+	bsr	Dev
+	move.l	d0,sc_GDX(a5)
+	move.l	d1,sc_GDY(a5)
+	bra.s	.dev
+.urad:	bsr	XScale			; r x the scale
+	move.l	gd_X2(a2),d1
+	bsr	XMul
+	asr.l	#8,d0
+	move.l	d0,sc_GDX(a5)
+.dev:	; 24.8 to 28.4; linear: the vector, its length^2, an index a pixel
+	moveq	#4,d1
+	move.l	sc_GX(a5),d0
+	asr.l	d1,d0
+	move.l	d0,sc_GX(a5)
+	move.l	sc_GY(a5),d0
+	asr.l	d1,d0
+	move.l	d0,sc_GY(a5)
+	move.l	sc_GDX(a5),d0
+	asr.l	d1,d0
+	move.l	d0,sc_GDX(a5)
+	move.l	sc_GDY(a5),d0
+	asr.l	d1,d0
+	move.l	d0,sc_GDY(a5)
+	tst.l	gd_Radial(a2)
+	bne.s	.rad
+	move.l	sc_GDX(a5),d0		; the vector: to - from
+	sub.l	sc_GX(a5),d0
+	move.l	sc_GDY(a5),d1
+	sub.l	sc_GY(a5),d1
+	move.l	d0,sc_GDX(a5)
+	move.l	d1,sc_GDY(a5)
+	bsr	Small
+	bne.s	.x
+	move.l	d0,d2			; length^2 (8 fraction bits)
+	muls.w	d0,d2
+	move.l	d1,d3
+	muls.w	d1,d3
+	add.l	d3,d2
+	beq.s	.x
+	bmi.s	.x
+	move.l	d2,sc_GL2(a5)
+	move.l	sc_GDX(a5),d0		; index a pixel: dx 16 x 256 x 65536
+	move.l	d0,d1			; / L2 = dx << 28 / L2
+	asr.l	#4,d1
+	moveq	#28,d3
+	lsl.l	d3,d0
+	divs.l	d2,d1:d0
+	bvc.s	.b
+	move.l	#$7fffffff,d0
+	tst.l	sc_GDX(a5)
+	bpl.s	.b
+	neg.l	d0
+.b:	move.l	d0,sc_GB(a5)
+	moveq	#1,d0
+	move.l	d0,sc_RGrad(a5)
+	bra.s	.x
+.rad:	move.l	sc_GDX(a5),d0		; a radius
+	ble.s	.x
+	move.l	sc_GX(a5),d0
+	move.l	sc_GY(a5),d1
+	bsr	Small
+	bne.s	.x
+	moveq	#2,d0
+	move.l	d0,sc_RGrad(a5)
+.x:	movem.l	(sp)+,d2-d7/a2
+	rts
+
+; Small - are d0, d1 within -32767 .. 32767?  Out: Z set if so (d0/d1
+; kept)
+Small:	cmp.l	#32767,d0
+	bgt.s	.no
+	cmp.l	#-32767,d0
+	blt.s	.no
+	cmp.l	#32767,d1
+	bgt.s	.no
+	cmp.l	#-32767,d1
+	blt.s	.no
+	move	#4,ccr			; (Z)
+	rts
+.no:	move	#0,ccr
+	rts
+
+; XScale - the transform's scale: sqrt |ad - bc|  Out: d0 (16.16)
+XScale:	movem.l	d2,-(sp)
+	lea	sc_St(a5),a0
+	move.l	gs_M(a0),d0
+	move.l	gs_M+12(a0),d1
+	bsr	XMul
+	move.l	d0,d2
+	lea	sc_St(a5),a0
+	move.l	gs_M+4(a0),d0
+	move.l	gs_M+8(a0),d1
+	bsr	XMul
+	sub.l	d0,d2
+	bpl.s	.p
+	neg.l	d2
+.p:	move.l	d2,d0
+	bsr	XSqrt
+	movem.l	(sp)+,d2
+	rts
+
+; PtsBox - the outline's box (device, 24.8)
+; Out: d2 = left, d3 = top, d4 = right, d5 = bottom
+PtsBox:	move.l	#$7fffffff,d2
+	move.l	d2,d3
+	move.l	#$80000000,d4
+	move.l	d4,d5
+	move.l	sc_Pts(a5),a0
+	move.l	sc_NPts(a5),d1
+	bra.s	.e
+.l:	move.l	(a0)+,d0
+	cmp.l	d2,d0
+	bge.s	.a
+	move.l	d0,d2
+.a:	cmp.l	d4,d0
+	ble.s	.b
+	move.l	d0,d4
+.b:	move.l	(a0)+,d0
+	cmp.l	d3,d0
+	bge.s	.c
+	move.l	d0,d3
+.c:	cmp.l	d5,d0
+	ble.s	.e
+	move.l	d0,d5
+.e:	dbf	d1,.l
+	rts
+
+; GradLut - (SetupGrad) the 256 colours of gradient a2 (from 0 to 1:
+; between its stops, each channel)
+GradLut:
+	movem.l	d2-d7/a3,-(sp)
+	lea	sc_Lut(a5),a3
+	moveq	#0,d2			; d2 = i (0 - 255)
+.i:	move.l	d2,d3			; d3 = where (0 - 256)
+	lsl.l	#8,d3
+	divu.w	#255,d3
+	and.l	#$ffff,d3
+	moveq	#0,d4			; d4 = the stop at or after it
+.k:	cmp.l	gd_N(a2),d4
+	bhs.s	.last
+	lea	gd_Off(a2),a0
+	cmp.l	(a0,d4.l*4),d3
+	ble.s	.at
+	addq.l	#1,d4
+	bra.s	.k
+.last:	move.l	gd_N(a2),d4		; (after the last: its colour)
+	subq.l	#1,d4
+.one:	lea	gd_Col(a2),a0
+	move.l	(a0,d4.l*4),(a3)+
+	bra.s	.n
+.at:	tst.l	d4			; (before the first: its colour)
+	beq.s	.one
+	lea	gd_Off(a2),a0		; between stops d4 - 1 and d4: f =
+	move.l	(a0,d4.l*4),d5		; (where - off1) * 256 / (off2 - off1)
+	move.l	-4(a0,d4.l*4),d6
+	sub.l	d6,d5
+	ble.s	.one
+	move.l	d3,d7
+	sub.l	d6,d7
+	lsl.l	#8,d7
+	divu.w	d5,d7
+	and.l	#$ffff,d7		; d7 = f (0 - 256)
+	lea	gd_Col(a2),a0
+	move.l	-4(a0,d4.l*4),d5	; d5 = the one before, d6 = after
+	move.l	(a0,d4.l*4),d6
+	moveq	#0,d0			; each channel: a + (b - a) f
+	moveq	#24,d1
+.ch:	move.l	d5,d3
+	lsr.l	d1,d3
+	and.l	#255,d3
+	move.l	d6,a0
+	movem.l	d0-d1,-(sp)
+	move.l	a0,d0
+	lsr.l	d1,d0
+	and.l	#255,d0
+	sub.l	d3,d0
+	muls.w	d7,d0
+	asr.l	#8,d0
+	add.l	d0,d3
+	movem.l	(sp)+,d0-d1
+	lsl.l	d1,d3
+	or.l	d3,d0
+	subq.l	#8,d1
+	bpl.s	.ch
+	move.l	d0,(a3)+
+.n:	addq.l	#1,d2
+	cmp.l	#256,d2
+	blo	.i
+	movem.l	(sp)+,d2-d7/a3
+	rts
+
+; GradRow - (PaintRow, linear) the colour index (16.16) at row d4's
+; first pixel  Out: d3
+GradRow:
+	movem.l	d2/d4-d5,-(sp)
+	move.l	d4,d0			; (28.4, the pixels' middles)
+	lsl.l	#4,d0
+	addq.l	#8,d0
+	sub.l	sc_GY(a5),d0
+	moveq	#8,d1
+	sub.l	sc_GX(a5),d1
+	bsr	Small
+	bne.s	.far
+	muls.w	sc_GDY+2(a5),d0		; num = (x - gx) dx + (y - gy) dy
+	muls.w	sc_GDX+2(a5),d1
+	add.l	d1,d0
+	bvs.s	.far
+	move.l	d0,d1			; t = num << 16 / L2 (16.16)
+	swap	d1
+	ext.l	d1
+	swap	d0
+	clr.w	d0
+	divs.l	sc_GL2(a5),d1:d0
+	bvs.s	.far
+	cmp.l	#$7fffff,d0		; (to +- 128 rounds)
+	ble.s	.c1
+	move.l	#$7fffff,d0
+.c1:	cmp.l	#-$7fffff,d0
+	bge.s	.c2
+	move.l	#-$7fffff,d0
+.c2:	lsl.l	#8,d0			; the index: t x 256
+	move.l	d0,d3
+	bra.s	.x
+.far:	moveq	#0,d3			; (out of reach: the first colour)
+.x:	movem.l	(sp)+,d2/d4-d5
+	rts
+
+; GradPixel - (PaintRow) the gradient's colour at pixel x d2 (28.4),
+; row d4, linear index d3 (16.16): into d7, its alpha into alpha d0
+; Out: d0 = the alpha (0: none; CCR set), d7 = the colour
+GradPixel:
+	movem.l	d2-d3,-(sp)
+	cmp.l	#2,sc_RGrad(a5)
+	beq.s	.rad
+	move.l	d3,d1			; linear: index d3 >> 16, 0 - 255
+	swap	d1
+	ext.l	d1
+	bra.s	.cl
+.rad:	move.l	d0,-(sp)		; radial: distance x 256 / radius
+	move.l	d2,d0
+	sub.l	sc_GX(a5),d0
+	move.l	d4,d1
+	lsl.l	#4,d1
+	addq.l	#8,d1
+	sub.l	sc_GY(a5),d1
+	bsr	Small
+	bne.s	.rfar
+	muls.w	d0,d0
+	muls.w	d1,d1
+	add.l	d1,d0
+	bsr	ISqrt			; (4 fraction bits)
+	lsl.l	#8,d0
+	divu.l	sc_GDX(a5),d0
+	move.l	d0,d1
+	bra.s	.rx
+.rfar:	move.l	#255,d1
+.rx:	move.l	(sp)+,d0
+.cl:	tst.l	d1
+	bpl.s	.c1
+	moveq	#0,d1
+.c1:	cmp.l	#255,d1
+	bls.s	.c2
+	move.l	#255,d1
+.c2:	move.l	sc_Lut(a5,d1.l*4),d7
+	move.l	d7,d1			; alpha x its alpha
+	rol.l	#8,d1
+	and.l	#255,d1
+	addq.l	#1,d1
+	mulu.w	d1,d0
+	lsr.l	#8,d0
+	and.l	#$ffffff,d7
+	movem.l	(sp)+,d2-d3
+	tst.l	d0
+	rts

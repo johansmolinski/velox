@@ -1,0 +1,22 @@
+#!/bin/sh
+# checks for latecss.script: laid out before the style sheet came (a
+# "layout" before its "sheet" line), "page" logged after it, with the
+# sheet's 600px margin in its height
+d=$(dirname "$1"); log="$d/latecss.log"
+grep -E "^(layout|sheet|page|shown)" "$log" | sed 's/^/log: /'
+python3 - "$log" <<'PY' || exit 1
+import sys
+ls = open(sys.argv[1], encoding="latin-1").read().splitlines()
+def at(p):
+    return next((i for i, l in enumerate(ls) if l.startswith(p)), None)
+s = at("sheet http://127.0.0.1:8080/slowcss")
+l = at("layout ")
+p = at("page http://127.0.0.1:8080/latecss")
+assert s is not None and l is not None and p is not None, "missing lines"
+assert l < s, "not laid out before the style sheet came"
+assert s < p, "page done before its style sheet"
+h = int(ls[p].split()[2])
+assert h > 300, "the style sheet not applied (height %d)" % h
+print("shown before its style sheet; height with it %d" % h)
+PY
+grep -q '^exit rc=0' "$1" || { echo "velox exit code: $(grep exit "$1")"; exit 1; }

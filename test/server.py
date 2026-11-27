@@ -146,6 +146,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(b"%x\r\n%s\r\n" % (len(data), data))
                 self.wfile.flush()
             self.wfile.write(b"0\r\n\r\n")
+        elif p == "/latecss":
+            # a page whose style sheet comes late: shown before it
+            self.send(200, b'<html><head><title>Late CSS</title>'
+                      b'<link rel="stylesheet" href="/slowcss"></head><body>'
+                      b'<p>Shown before its style sheet comes.</p>'
+                      b'<p class="late">Moved down by it.</p></body></html>',
+                      "text/html")
+        elif p == "/slowcss":
+            time.sleep(6)
+            self.send(200, b".late { margin-top: 600px }", "text/css")
         elif p == "/slowpage":
             time.sleep(12)
             self.send(200, b"<title>Slow</title><p>A slow page.", "text/html")

@@ -28,7 +28,7 @@
 	include	"velox.i"
 	xref	TaskPoll
 
-	xdef	CssReset,CssAddSheet,CssApply,CssInvalidate,CssLoad
+	xdef	CssReset,CssAddSheet,CssApply,CssInvalidate,CssLoad,CssLoadFirst
 	IFD	PROFILE
 	xref	ProfRead
 	ENDC
@@ -36,7 +36,7 @@
 	xref	PageAlloc,DomGetAttr,TagLookup,ToLower,ParseColor,ParseLength
 	xref	StrIPrefix,StrIFind,ParseDec,HttpGetCached,UrlResolve,DecodeCharset
 	xref	BgFind
-	xref	BufFree,GuiStatus,LogEvent
+	xref	BufFree,GuiStatus,LogEvent,CacheHas
 
 MAX_SHEETS	equ	8		; linked style sheets fetched per page
 MAX_SHEET	equ	512*1024
@@ -116,10 +116,11 @@ CP_COUNT	rs.b	0
 	section	code,code
 
 ;--------------------------------------------------------------------
-; CssReset - forget all rules (new page)
+; CssReset - forget all rules (new page, or its sheets read again: the
+; elements' matches too)
 ;--------------------------------------------------------------------
 CssReset:
-	jsr	StyleStale
+	bsr	CssInvalidate
 	clr.l	g_CssVars(a4)
 	clr.l	g_CssRules(a4)
 	clr.l	g_CssHasMq(a4)
@@ -140,10 +141,35 @@ CssReset:
 .x:	rts
 
 ;--------------------------------------------------------------------
-; CssLoad - collect the page's style sheets, in document order
+; CssLoadFirst - the page's style sheets if the linked ones are at hand
+; (in a cache and fresh: no waiting); else only its <style>s, the page
+; to be shown plain meanwhile, and CssLoad later (after the body)
+; Out: d0 = 1 if CssLoad is still to be done (CCR set)
 ;--------------------------------------------------------------------
+CssLoadFirst:
+	moveq	#CSSL_CHECK,d0
+	bsr.s	CssLoadMode
+	beq.s	CssLoad			; (all at hand)
+	moveq	#CSSL_INLINE,d0
+	bsr.s	CssLoadMode
+	moveq	#1,d0
+	rts
+
+;--------------------------------------------------------------------
+; CssLoad - collect the page's style sheets, in document order
+; CssLoadMode - the same, d0 = CSSL_xxx: CSSL_CHECK reads none, but
+; tells if a linked one is not at hand (Out: d0 = 1, CCR set);
+; CSSL_INLINE reads only the <style>s
+;--------------------------------------------------------------------
+CSSL_ALL	equ	0
+CSSL_CHECK	equ	1
+CSSL_INLINE	equ	2
 CssLoad:
-	movem.l	d2-d3/a2-a3/a5,-(sp)
+	moveq	#CSSL_ALL,d0
+CssLoadMode:
+	movem.l	d2-d5/a2-a3/a5,-(sp)
+	move.l	d0,d4			; d4 = mode, d5 = 1: one not at hand
+	moveq	#0,d5
 	moveq	#1,d0			; (the rules half made meanwhile: no
 	move.l	d0,g_CssBusy(a4)	;  layout from the window, GuiRelayout)
 	bsr	CssReset
@@ -164,7 +190,9 @@ CssLoad:
 	cmp.w	#TAG_LINK,d0
 	beq.s	.link
 	bra	.down
-.style:	move.l	a3,a0
+.style:	cmp.l	#CSSL_CHECK,d4
+	beq	.next
+	move.l	a3,a0
 	bsr	MediaOk
 	beq	.next
 	move.l	n_First(a3),d0		; <style>text</style>
@@ -193,6 +221,8 @@ CssLoad:
 	lea	SAlternate(pc),a1
 	jsr	StrIFind
 	bne	.next
+	cmp.l	#CSSL_INLINE,d4
+	beq	.next
 	move.l	a3,a0
 	bsr	MediaOk
 	beq	.next
@@ -222,6 +252,14 @@ CssLoad:
 	jsr	UrlResolve
 	beq	.next
 	addq.l	#1,d3
+	cmp.l	#CSSL_CHECK,d4		; (only: is it at hand?)
+	bne.s	.get
+	lea	g_LinkUrl(a4),a0
+	jsr	CacheHas
+	bne	.next
+	moveq	#1,d5
+	bra	.x
+.get:
 	lea	MsgSheet(pc),a0
 	jsr	GuiStatus
 	lea	g_LinkUrl(a4),a0
@@ -282,7 +320,9 @@ CssLoad:
 	bra	.walk
 .x:	clr.l	g_CssBusy(a4)
 	clr.l	g_CssVars(a4)		; (only while sheets are parsed)
-	movem.l	(sp)+,d2-d3/a2-a3/a5
+	move.l	d5,d0
+	movem.l	(sp)+,d2-d5/a2-a3/a5
+	tst.l	d0
 	rts
 
 AnRel:		dc.b	"rel",0

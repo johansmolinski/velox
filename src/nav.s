@@ -24,6 +24,7 @@
 	xref	ClipCopy
 	xref	GuiStatus,GuiSetUrl,GuiSetTitle,GuiRefresh,GuiNetHook
 	xref	GuiPageWidth,GuiScrollTo,LogEvent,CssLoad,BufFree,ImagesStart
+	xref	CssLoadFirst
 	xref	GuiProgress,TaskAbort,TaskStart,ImagesLoad,TaskBusy,TaskNow
 	xref	HtmlBegin,HtmlMore,IsValidUtf8,GuiRelayout,GuiLayout
 	xref	PageRestore,KeepDrop,ImagesAgain,PfLoad,PfSave,PfSaveKept,DcHash
@@ -382,9 +383,12 @@ Utf8Cut:
 	movem.l	(sp)+,d2-d3
 	rts
 
-; IncShow - the body begins: the style sheets, then the page is shown
+; IncShow - the body begins: the style sheets (if they are at hand;
+; else after the body: CssLoadFirst), then the page is shown
 IncShow:
-	bsr	IncCss
+	moveq	#1,d0
+	bsr	IncCssMode
+	move.l	d0,g_CssLater(a4)
 	tst.l	g_TkAbort(a4)
 	bne.s	.x
 	moveq	#1,d0
@@ -441,7 +445,13 @@ IncTime:
 
 ; IncCss - fetch the style sheets (CssLoad) in the middle of the page's
 ; body: its response is put aside meanwhile (the connection waits)
+; IncCssMode - d0 = 1: CssLoadFirst (Out: d0 = 1 if CssLoad is still
+; to be done)
 IncCss:
+	moveq	#0,d0
+IncCssMode:
+	move.l	d2,-(sp)
+	move.l	d0,d2
 	lea	g_Resp(a4),a0
 	lea	g_RespSave(a4),a1
 	move.l	#RESP_SIZEOF/4-1,d0
@@ -454,8 +464,13 @@ IncCss:
 	clr.l	g_ProgressHook(a4)
 	jsr	TaskNow
 	move.l	d0,g_IncT0(a4)
-	jsr	CssLoad
-	move.l	(sp)+,g_ProgressHook(a4)
+	tst.l	d2
+	beq.s	.all
+	jsr	CssLoadFirst
+	move.l	d0,d2
+	bra.s	.got
+.all:	jsr	CssLoad
+.got:	move.l	(sp)+,g_ProgressHook(a4)
 	lea	g_Resp+r_Body(a4),a0
 	jsr	BufFree
 	lea	g_RespSave(a4),a0
@@ -465,7 +480,28 @@ IncCss:
 	dbf	d0,.r
 	bsr	SheetCount
 	move.l	d0,g_IncSheets(a4)
+	move.l	d2,d0
+	movem.l	(sp)+,d2
 	rts
+
+; CssAfter - a page shown before its linked style sheets came
+; (g_CssLater): now them, the page laid out again, and done (ShowDone)
+CssAfter:
+	tst.l	g_CssLater(a4)
+	beq.s	.x
+	clr.l	g_CssLater(a4)
+	tst.l	g_TkAbort(a4)		; (another page meanwhile)
+	bne.s	.x
+	move.l	g_NetSigHook(a4),-(sp)	; (the window served meanwhile)
+	lea	GuiNetHook,a0
+	move.l	a0,g_NetSigHook(a4)
+	bsr	IncCss
+	move.l	(sp)+,g_NetSigHook(a4)
+	jsr	GuiRelayout
+	lea	g_TitleText(a4),a0	; ("Loading style sheet...": done)
+	jsr	GuiStatus
+	bra	ShowDone
+.x:	rts
 
 ; SheetCount - Out: d0 = <style> and <link> elements in the page
 SheetCount:
@@ -630,6 +666,7 @@ NavLoad:
 	moveq	#2,d0			; Back/Forward (NAV_CACHE): images as
 	and.l	d3,d0			; they are in the cache, not checked
 	move.l	d0,g_ImgNoCheck(a4)
+	clr.l	g_CssLater(a4)
 	move.l	g_WinSigMask(a4),d0	; window events and Ctrl-C can stop
 	or.l	#SIGBREAKF_CTRL_C,d0	; the page and its style sheets
 	move.l	d0,g_AbortMask(a4)
@@ -829,11 +866,14 @@ NavLoad:
 	jsr	StrCopyN
 	bsr	PageFixups
 	clr.l	g_ProgressHook(a4)	; (style sheets: their own message)
-	jsr	CssLoad
+	moveq	#1,d0			; (if they are at hand; else after it
+	bsr	IncCssMode		;  is shown, CssAfter)
+	move.l	d0,g_CssLater(a4)
 	clr.l	g_NetSigHook(a4)
 	tst.l	g_Quit(a4)
 	bne	.x
 	bsr	ShowPage
+	bsr	CssAfter
 	tst.l	g_TkAbort(a4)		; another page while laid out: not
 	beq.s	.shown			; shown (Esc: shown, then stopped)
 	tst.l	g_NavStopped(a4)
@@ -877,14 +917,20 @@ NavLoad:
 	bsr	PageFixups
 	tst.l	g_IncShown(a4)
 	bne.s	.inc2
-	bsr	IncCss			; (never shown: a short page)
+	moveq	#1,d0			; (never shown: a short page)
+	bsr	IncCssMode
+	move.l	d0,g_CssLater(a4)
 	tst.l	g_Quit(a4)
 	bne	.x
 	bsr	ShowPage
+	bsr	CssAfter
 	bra	.shown
-.inc2:	bsr	SheetCount		; style sheets in the body: again
+.inc2:	tst.l	g_CssLater(a4)		; its linked sheets now
+	bne.s	.incl
+	bsr	SheetCount		; style sheets in the body: again
 	cmp.l	g_IncSheets(a4),d0
 	beq.s	.inc3
+.incl:	clr.l	g_CssLater(a4)
 	bsr	IncCss
 .inc3:	jsr	GuiRelayout		; all of it
 	bsr	ShowDone
@@ -1818,6 +1864,8 @@ ShowPage:
 	jsr	GuiRefresh
 	tst.l	g_IncState(a4)		; shown before it has all come
 	bgt.s	.inc
+	tst.l	g_CssLater(a4)		; ... or its style sheets (CssAfter)
+	bne.s	.inc
 	bsr.s	ShowDone
 .inc:	movem.l	(sp)+,a2
 	rts

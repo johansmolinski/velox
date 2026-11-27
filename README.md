@@ -75,7 +75,8 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
 - Keyboard navigation for everything; keys typed while a page loads
   are not lost
 - Stays responsive while loading: the page scrolls, and links,
-  gadgets and menus work, while images and pages load
+  gadgets and menus work, while images and pages load; a page is
+  shown plain while its style sheets are still being fetched
 - Transfer progress in the status line
 - Select text with the mouse: it is copied to the clipboard
 

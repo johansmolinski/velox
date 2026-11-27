@@ -36,7 +36,7 @@ A small, fast web browser for AmigaOS 3.x, written in 68k assembly.
 
 Velox is a web browser for classic Amigas: AmigaOS 3.1 or newer on a 68020 or better. All of it is written in 68k assembly, and it decodes JPEG, PNG, GIF and WebP images itself, so it needs no datatypes for them.
 
-Velox stays responsive while it loads: the page scrolls and links, gadgets and menus work while pages and their images still come in. Pages can load in several @{" tabs " link Tabs} at once.
+Velox stays responsive while it loads: the page scrolls and links, gadgets and menus work while pages and their images still come in. A page whose style sheets must still be fetched is shown plain as it comes, and laid out with them once they are there. Pages can load in several @{" tabs " link Tabs} at once.
 
 It shows the web of today as far as an Amiga can: HTML with a tolerant parser, much of CSS, tables, forms, frames, image maps, cookies and https. There is no JavaScript; see @{" Limits " link Limits}.
 

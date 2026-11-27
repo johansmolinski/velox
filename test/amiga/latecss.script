@@ -1,0 +1,7 @@
+; latecss: a page whose style sheet takes long is shown before it
+; comes, and laid out again with it (test/amiga/latecss.check)
+Echo >VELOX:r/latecss.txt "latecss"
+Echo >VELOX:r/latecss.start ""
+VELOX:velox http://127.0.0.1:8080/latecss LOG=VELOX:r/latecss.log
+Echo >>VELOX:r/latecss.txt "exit rc=$RC"
+Echo >>VELOX:r/latecss.txt "done"

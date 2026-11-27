@@ -10,8 +10,8 @@
 
 	include	"velox.i"
 
-	xdef	CacheInit,CacheStore,HttpGetCached,CacheFlush
-	xref	DcLoad,DcFresh,DcCond
+	xdef	CacheInit,CacheStore,HttpGetCached,CacheFlush,CacheHas
+	xref	DcLoad,DcFresh,DcCond,DcPeek
 	xref	DcTouch
 	xref	Alloc,Free,HttpGet,StrLen,StrCopyN,BufFree,BufReserve,LogEvent
 
@@ -41,6 +41,33 @@ CacheInit:
 	bls.s	.s
 	move.l	#CACHE_LIMIT,d0
 .s:	move.l	d0,g_CacheMax(a4)
+	rts
+
+;--------------------------------------------------------------------
+; CacheHas - can HttpGetCached answer URL a0 without the network (in
+; memory, or fresh on disk; Back/Forward: on disk)?
+; Out: d0 = 1 if so (CCR set)
+;--------------------------------------------------------------------
+CacheHas:
+	tst.l	g_NoCache(a4)		; (Reload)
+	bne.s	.no
+	movem.l	a2,-(sp)
+	move.l	a0,a2
+	bsr	Find
+	bne.s	.yes
+	move.l	a2,a0
+	moveq	#0,d0
+	jsr	DcPeek
+	beq.s	.no2
+	jsr	DcFresh
+	bne.s	.yes
+	btst	#1,g_NavFlags+3(a4)	; (NAV_CACHE)
+	beq.s	.no2
+.yes:	moveq	#1,d0
+	movem.l	(sp)+,a2
+	rts
+.no2:	movem.l	(sp)+,a2
+.no:	moveq	#0,d0
 	rts
 
 ;--------------------------------------------------------------------

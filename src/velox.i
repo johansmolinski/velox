@@ -636,6 +636,8 @@ g_IncShown	rs.l	1		; it is shown
 g_IncRaw	rs.l	1		; body bytes decoded so far
 g_IncCs		rs.l	1		; its character set (-1: not yet)
 g_IncSheets	rs.l	1		; <style>/<link> when the CSS was loaded
+g_CssLater	rs.l	1		; shown before its linked sheets came:
+					; they are fetched after the body
 g_IncLast	rs.l	1		; the last layout (ticks)
 g_IncEvery	rs.l	1		; ticks between layouts
 g_IncT0		rs.l	1		; when the last layout started

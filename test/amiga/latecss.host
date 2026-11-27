@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Host side of latecss.script: a screenshot while the style sheet is
+still coming (the page shown plain), another with it; then quit."""
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from xdrive import Amiga, wait_log  # noqa: E402
+
+r = sys.argv[1]
+log = os.path.join(r, "latecss.log")
+try:
+    a = Amiga()
+    wait_log(log, "layout ", timeout=60)
+    time.sleep(1)
+    a.shot(os.path.join(r, "latecss-plain.png"))
+    wait_log(log, "page http://127.0.0.1:8080/latecss", timeout=60)
+    time.sleep(1)
+    a.shot(os.path.join(r, "latecss-styled.png"))
+except Exception:
+    pass
+Amiga().key("ctrl+q")

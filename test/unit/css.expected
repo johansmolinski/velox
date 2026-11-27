@@ -297,3 +297,28 @@ text 130 8 40 10 8 f1 s0 c000000 "stray"
 text 130 56 32 10 8 f1 s0 c000000 "cell"
 text 130 96 48 10 8 f1 s0 c000000 "inline"
 
+# inline-blocks, inline-flex, floats side by side, max-width
+layout test/unit/layout/iblock.html 400 => 
+height 124
+rect 0 8 48 10 0 f0 s0 ccccccc
+text 0 8 48 10 8 f1 s0 c000000 "Forums"
+text 0 56 80 10 8 f1 s0 c000000 "What's new"
+text 0 136 56 10 8 f1 s0 c000000 "Members"
+text 22 8 32 10 8 f1 s0 c000000 "text"
+rect 20 48 20 10 0 f0 s0 cff0000
+text 20 48 8 10 8 f1 s0 c000000 "P"
+text 22 76 312 10 8 f1 s0 c000000 "after the avatar and more words to wrap"
+text 32 8 112 10 8 f1 s0 c000000 "the line along"
+text 64 8 8 10 8 f1 s0 c000000 "a"
+text 52 24 24 10 8 f1 s2 c000000 "one"
+text 62 24 24 10 8 f1 s2 c000000 "two"
+text 64 56 8 10 8 f1 s0 c000000 "b"
+text 74 8 32 10 8 f1 s0 c000000 "tabs"
+text 74 265 48 10 8 f1 s1 c0000ee L "Log in"
+text 74 323 64 10 8 f1 s1 c0000ee L "Register"
+rect 84 8 100 40 0 f0 s0 ceeeeee
+text 84 8 96 10 8 f1 s0 c000000 "max-width: a"
+text 94 8 64 10 8 f1 s0 c000000 "block no"
+text 104 8 80 10 8 f1 s0 c000000 "wider than"
+text 114 8 32 10 8 f1 s0 c000000 "this"
+

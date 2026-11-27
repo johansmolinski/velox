@@ -3470,7 +3470,13 @@ PDisplay:
 .s:	tst.b	(a1)+
 	bne.s	.s
 	bra.s	.l
-.got:	; table values: a table's own elements keep theirs; others
+.got:	bclr	#7,st_Flags(a3)		; (SF_IBLK, FF_INLINE: iblock.s)
+	bclr	#3,st_FlexF(a3)
+	cmp.b	#DISP_IFLEX,d2
+	bne.s	.g1
+	bset	#3,st_FlexF(a3)
+	moveq	#DISP_IBLOCK,d2
+.g1:	; table values: a table's own elements keep theirs; others
 	; are CSS tables (table.s; a cell outside one: side by side)
 	cmp.b	#DISP_TABLE,d2
 	blo.s	.set
@@ -3487,13 +3493,15 @@ PDisplay:
 	bne.s	.x
 .set:	cmp.b	#DISP_IBLOCK,d2		; inline-block boxes: inline
 	bne.s	.st
+	bset	#7,st_Flags(a3)		; (SF_IBLK)
 	moveq	#DISP_INLINE,d2
 .st:	move.b	d2,st_Display(a3)
 	rts
 
+DISP_IFLEX	equ	$40		; (DisplayKw: inline-flex)
 DisplayKw:
 	dc.b	DISP_NONE,"none",0,DISP_BLOCK,"block",0,DISP_INLINE,"inline",0
-	dc.b	DISP_IBLOCK,"inline-block",0,DISP_INLINE,"inline-flex",0
+	dc.b	DISP_IBLOCK,"inline-block",0,DISP_IFLEX,"inline-flex",0
 	dc.b	DISP_INLINE,"inline-grid",0,DISP_INLINE,"contents",0
 	dc.b	DISP_FLEX,"flex",0,DISP_BLOCK,"grid",0,DISP_BLOCK,"flow-root",0
 	dc.b	DISP_LISTITEM,"list-item",0,DISP_TABLE,"table",0
@@ -4039,23 +4047,16 @@ PMaxWidth:
 	bsr	ImgLen
 	move.w	d0,st_MaxW(a3)
 	rts
-.css:	move.l	a2,a0
+.css:	moveq	#0,d0			; (none: 0)
+	move.l	a2,a0
 	lea	KwNone(pc),a1
 	bsr	Kw
-	bne.s	.x
+	bne.s	.set
 	moveq	#CSS_EM,d0
 	jsr	ParseLength
 	bsr	WidthValue
-	beq.s	.x
-	move.w	st_Width(a3),d1		; only if narrower than a pixel width
-	beq.s	.set
-	bmi.s	.x
-	tst.w	d0
-	bmi.s	.x
-	cmp.w	d1,d0
-	bge.s	.x
-.set:	move.w	d0,st_Width(a3)
-.x:	rts
+.set:	move.w	d0,st_MaxW(a3)		; (a block: BlockBounds)
+	rts
 
 ; PTLayout - table-layout: fixed (SF_TFIXED)
 PTLayout:

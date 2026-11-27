@@ -30,6 +30,7 @@
 	ENDC
 	xref	StyleRoot,StyleCompute,BufClear,BufReserve,PageAlloc,FmtDec,StyleOf
 	xref	DomGetAttr,ParseDec,LayoutTable,CssApply,CssTableMode
+	xref	IsAtomic,InlineBlock
 	xref	FormIsControl,FormControlSize,CssInvalidate,TaskPoll,BufFree,LogEvent
 	xref	ViewSelect,LayoutFlex
 
@@ -246,7 +247,17 @@ LayoutNode:
 	beq.s	.br
 	cmp.w	#TAG_HR,d1
 	beq.s	.hr
-	cmp.b	#DISP_INLINE,d0
+	btst	#2,st_Flags(a3)		; floated (not an image, a table):
+	bne.s	.flt			; an inline-block (iblock.s)
+	btst	#3,st_Flags(a3)
+	beq.s	.nflt
+.flt:	cmp.b	#DISP_TABLE,d0
+	blo.s	.fib
+	cmp.b	#DISP_FLEX,d0
+	bne.s	.nflt
+.fib:	jsr	InlineBlock
+	bra	.pop
+.nflt:	cmp.b	#DISP_INLINE,d0
 	beq.s	.inline
 	cmp.b	#DISP_IBLOCK,d0
 	beq.s	.replaced
@@ -261,7 +272,11 @@ LayoutNode:
 	bsr	LayoutBlock
 	bra.s	.pop
 .inline:
-	tst.l	st_Bg(a3)		; a background or an outline: a box
+	jsr	IsAtomic		; an inline-block of blocks: one box
+	beq.s	.inl0
+	jsr	InlineBlock
+	bra	.pop
+.inl0:	tst.l	st_Bg(a3)		; a background or an outline: a box
 	bpl.s	.ibox
 	tst.l	st_Edge(a3)
 	bpl.s	.ibox
@@ -711,7 +726,18 @@ BlockBounds:
 	move.w	st_MRight(a1),d0
 	ext.l	d0
 	sub.l	d0,g_LayRight(a4)
-	move.w	st_Width(a1),d0		; explicit width
+	move.w	st_Width(a1),d0		; explicit width (max-width: one if
+	move.w	st_MaxW(a1),d1		;  narrower)
+	beq.s	.wd
+	tst.w	d0
+	beq.s	.wm
+	ble.s	.wd			; (with percents: the width)
+	tst.w	d1
+	ble.s	.wd
+	cmp.w	d1,d0
+	ble.s	.wd
+.wm:	move.w	d1,d0
+.wd:	tst.w	d0
 	beq.s	.nw
 	cmp.b	#DISP_TABLE,st_Display(a1)	; tables size themselves
 	beq.s	.nw
@@ -875,11 +901,15 @@ FlushLine:
 	bsr	LayRunPtr
 	move.l	d2,d0
 	add.l	d3,d0
-	moveq	#0,d1
+	bclr	#RFB_IBLK,ru_Flags(a0)	; in an inline-block: from its
+	beq.s	.base			; bottom, on the baseline
+	add.l	d0,ru_Y(a0)
+	bra.s	.hx
+.base:	moveq	#0,d1
 	move.w	ru_Base(a0),d1
 	sub.l	d1,d0
 	move.l	d0,ru_Y(a0)
-	add.w	d4,ru_X(a0)
+.hx:	add.w	d4,ru_X(a0)
 	addq.l	#1,d5
 	bra.s	.l
 .adv:	add.l	g_LineDesc(a4),d3

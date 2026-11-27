@@ -1470,7 +1470,15 @@ MeasureNode:
 	moveq	#0,d1
 	bsr	MeasWord
 	bra	.pop
-.nctl:	move.b	st_Display(a3),d0
+.nctl:	move.b	st_Flags(a3),d0		; floated: as an inline-block
+	and.b	#SF_FLOATL|SF_FLOATR,d0
+	beq.s	.nflt
+	move.b	st_Display(a3),d0
+	cmp.b	#DISP_TABLE,d0
+	blo	.ibl
+	cmp.b	#DISP_FLEX,d0
+	beq	.ibl
+.nflt:	move.b	st_Display(a3),d0
 	cmp.b	#DISP_INLINE,d0
 	beq.s	.inl
 	cmp.b	#DISP_IBLOCK,d0
@@ -1525,10 +1533,44 @@ MeasureNode:
 .b2:	move.l	d4,g_MeasMin(a4)
 	move.l	d5,g_MeasPref(a4)
 	bra.s	.pop
-.inl:	move.l	a5,a0
+.inl:	btst	#7,st_Flags(a3)		; SF_IBLK: an inline-block is one
+	bne.s	.ibl			; word, as wide as its content
+	btst	#3,st_FlexF(a3)		; (FF_INLINE)
+	bne.s	.ibl
+	move.l	a5,a0
 	move.l	a3,a1
 	bsr	MeasureChildren
-	bra.s	.pop
+	bra	.pop
+.ibl:	move.l	g_MeasMin(a4),d2
+	move.l	g_MeasPref(a4),d3
+	move.l	g_MeasLine(a4),d4
+	clr.l	g_MeasMin(a4)
+	clr.l	g_MeasPref(a4)
+	clr.l	g_MeasLine(a4)
+	move.l	a5,a0
+	move.l	a3,a1
+	bsr	MeasureChildren
+	bsr	MeasBreak
+	move.w	st_MLeft(a3),d0
+	add.w	st_MRight(a3),d0
+	ext.l	d0
+	move.l	g_MeasMin(a4),d1	; d1 = its minimum, d5 = preferred
+	move.l	g_MeasPref(a4),d5
+	move.w	st_Width(a3),d6		; (a width given: that)
+	ble.s	.ibw
+	ext.l	d6
+	move.l	d6,d1
+	move.l	d6,d5
+.ibw:	add.l	d0,d1
+	add.l	d0,d5
+	move.l	d2,g_MeasMin(a4)
+	move.l	d3,g_MeasPref(a4)
+	move.l	d4,g_MeasLine(a4)
+	cmp.l	g_MeasMin(a4),d1
+	ble.s	.ib1
+	move.l	d1,g_MeasMin(a4)
+.ib1:	add.l	d5,g_MeasLine(a4)
+	bra	.pop
 .row:	; a row of a nested table: cells side by side
 	bsr	MeasBreak
 	move.l	g_MeasMin(a4),d2

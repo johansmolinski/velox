@@ -22,3 +22,5 @@ layout test/unit/layout/flex.html 200
 layout test/unit/layout/classes.html 400
 # CSS tables: one row, rows in a group, an anonymous cell, fixed, none
 layout test/unit/layout/csstable.html 400
+# inline-blocks, inline-flex, floats side by side, max-width
+layout test/unit/layout/iblock.html 400

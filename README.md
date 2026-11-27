@@ -28,7 +28,8 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
   justify-content, align-items, auto margins); CSS tables
   (`display: table`, `table-row`, `table-cell` on any element, also
   `table-layout: fixed`); image sizes from CSS (`width`, `height`,
-  `max-width`, `max-height`); inline elements
+  `max-width`, `max-height`); `inline-block` and `inline-flex` boxes;
+  floated elements (other than images) side by side; inline elements
   with a background (buttons made of links, highlighted words) get it
   behind them with their padding, and an outline for `border` or
   `box-shadow`

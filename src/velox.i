@@ -258,9 +258,11 @@ SF_FLOATR	equ	8		; st_Flags: float: right
 SF_MAUTOL	equ	$10		; st_Flags: margin-left: auto (flex items)
 SF_MAUTOR	equ	$20		; st_Flags: margin-right: auto
 SF_TFIXED	equ	$40		; st_Flags: table-layout: fixed
+SF_IBLK		equ	$80		; st_Flags: display: inline-block (iblock.s)
 FF_COLUMN	equ	1		; st_FlexF: flex-direction: column
 FF_WRAP		equ	2		; ... flex-wrap: wrap
 FF_NOSHRINK	equ	4		; ... (an item) flex-shrink: 0
+FF_INLINE	equ	8		; ... display: inline-flex (iblock.s)
 JC_START	equ	0		; st_Just: justify-content
 JC_END		equ	1
 JC_CENTER	equ	2
@@ -306,8 +308,8 @@ st_Grow		rs.b	1		; an item's flex-grow (0 - 255)
 st_Gap		rs.b	1		; column-gap, px
 st_RGap		rs.b	1		; row-gap, px
 st_FlexPad	rs.b	1
-st_MaxW		rs.w	1		; an image's max-width (px; negative:
-st_MaxH		rs.w	1		;  percent), max-height; 0 none
+st_MaxW		rs.w	1		; max-width (as st_Width; an image's in
+st_MaxH		rs.w	1		;  its pixels), an image's max-height
 STYLE_SIZEOF	rs.b	0
 SK_GEN		equ	0		; n_Style (style.s): g_StyleGen,
 SK_PARENT	equ	4		; the parent's style,
@@ -433,12 +435,14 @@ ru_Base		rs.w	1		; baseline offset from ru_Y
 ru_Type		rs.b	1
 ru_Font		rs.b	1
 ru_Soft		rs.b	1
-ru_Flags	rs.b	1
+ru_Flags	rs.b	1		; RFB_IBLK: y from an inline-block's
+					; bottom, until its line is placed
 ru_Color	rs.l	1		; $RRGGBB
 ru_Text		rs.l	1
 ru_Len		rs.l	1
 ru_Link		rs.l	1		; <a> element (or form control)
 RUN_SIZEOF	rs.b	0
+RFB_IBLK	equ	0		; ru_Flags bit (iblock.s)
 
 ;--------------------------------------------------------------------
 ; FormState - state of a form control (in the element's n_Data2)

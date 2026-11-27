@@ -1533,6 +1533,8 @@ GuiAnimTick:
 	move.b	ru_Type(a0),d0
 	cmp.b	#RT_MARQUEE,d0
 	beq.s	.an
+	cmp.b	#RT_IMAGE,d0
+	beq.s	.img
 	cmp.b	#RT_TEXT,d0
 	bne.s	.l
 	btst	#4,ru_Soft(a0)		; (SOFT_BLINK)
@@ -1540,6 +1542,19 @@ GuiAnimTick:
 	addq.l	#1,d7
 	tst.l	d6
 	beq.s	.l
+	bra.s	.pt
+.img:	move.l	ru_Text(a0),a1		; an animation: its next frame due?
+	move.l	n_Data2(a1),d0
+	beq	.l
+	move.l	d0,a1
+	tst.l	im_Frames(a1)
+	beq	.l
+	addq.l	#1,d7
+	move.l	a0,-(sp)
+	move.l	a1,a0
+	bsr	FrameStep
+	movem.l	(sp)+,a0
+	beq	.l
 	bra.s	.pt
 .an:	addq.l	#1,d7
 .pt:	move.l	a0,a2			; in view?
@@ -1580,7 +1595,16 @@ GuiAnimFind:
 	addq.l	#1,d2
 	cmp.b	#RT_MARQUEE,ru_Type(a0)
 	beq.s	.y
-	cmp.b	#RT_TEXT,ru_Type(a0)
+	cmp.b	#RT_IMAGE,ru_Type(a0)
+	bne.s	.ni
+	move.l	ru_Text(a0),a1		; (an animation)
+	move.l	n_Data2(a1),d0
+	beq.s	.l
+	move.l	d0,a1
+	tst.l	im_Frames(a1)
+	bne.s	.y
+	bra.s	.l
+.ni:	cmp.b	#RT_TEXT,ru_Type(a0)
 	bne.s	.l
 	btst	#4,ru_Soft(a0)
 	beq.s	.l
@@ -1588,6 +1612,34 @@ GuiAnimFind:
 	bra.s	.x
 .no:	moveq	#0,d0
 .x:	movem.l	(sp)+,d2-d3
+	rts
+
+; FrameStep - (GuiAnimTick) animation a0 (an ImageInfo): its next
+; frame if it is due (once a tick, however many show it)
+; Out: d0 = 1 if it changed this tick (CCR set)
+FrameStep:
+	move.l	g_AnimTicks(a4),d1
+	cmp.l	im_Done(a0),d1		; (another of its runs did it)
+	beq.s	.y
+	cmp.l	im_Due(a0),d1
+	blo.s	.no
+	move.l	im_Frames(a0),a1
+	move.l	im_Cur(a0),d0		; the next one, round
+	addq.l	#1,d0
+	cmp.l	(a1),d0
+	blo.s	.c
+	moveq	#0,d0
+.c:	move.l	d0,im_Cur(a0)
+	mulu.w	#FR_SIZEOF,d0
+	lea	4(a1,d0.l),a1
+	move.l	fr_BitMap(a1),im_BitMap(a0)
+	move.l	fr_Mask(a1),im_Mask(a0)
+	add.l	fr_Ticks(a1),d1
+	move.l	d1,im_Due(a0)
+	move.l	g_AnimTicks(a4),im_Done(a0)
+.y:	moveq	#1,d0
+	rts
+.no:	moveq	#0,d0
 	rts
 
 ; AnimOk - may the page in G animate?  (Shown, in a window, laid out;

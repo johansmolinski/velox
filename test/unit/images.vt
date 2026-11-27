@@ -6,6 +6,10 @@ decode build/img/bad0-g16i.gif build/img/bad0-g16i.gif.bad
 decode build/img/bad0-g2.gif build/img/bad0-g2.gif.bad
 decode build/img/bad0-g256.gif build/img/bad0-g256.gif.bad
 decode build/img/bad0-g256i.gif build/img/bad0-g256i.gif.bad
+decode build/img/bad0-ganim.gif build/img/bad0-ganim.gif.bad
+decode build/img/bad0-ganimd1.gif build/img/bad0-ganimd1.gif.bad
+decode build/img/bad0-ganimd2.gif build/img/bad0-ganimd2.gif.bad
+decode build/img/bad0-ganimd3.gif build/img/bad0-ganimd3.gif.bad
 decode build/img/bad0-gbig.gif build/img/bad0-gbig.gif.bad
 decode build/img/bad0-gtrans.gif build/img/bad0-gtrans.gif.bad
 decode build/img/bad0-i1.ico build/img/bad0-i1.ico.bad
@@ -72,6 +76,10 @@ decode build/img/bad1-g16i.gif build/img/bad1-g16i.gif.bad
 decode build/img/bad1-g2.gif build/img/bad1-g2.gif.bad
 decode build/img/bad1-g256.gif build/img/bad1-g256.gif.bad
 decode build/img/bad1-g256i.gif build/img/bad1-g256i.gif.bad
+decode build/img/bad1-ganim.gif build/img/bad1-ganim.gif.bad
+decode build/img/bad1-ganimd1.gif build/img/bad1-ganimd1.gif.bad
+decode build/img/bad1-ganimd2.gif build/img/bad1-ganimd2.gif.bad
+decode build/img/bad1-ganimd3.gif build/img/bad1-ganimd3.gif.bad
 decode build/img/bad1-gbig.gif build/img/bad1-gbig.gif.bad
 decode build/img/bad1-gtrans.gif build/img/bad1-gtrans.gif.bad
 decode build/img/bad1-i1.ico build/img/bad1-i1.ico.bad
@@ -138,6 +146,10 @@ decode build/img/bad2-g16i.gif build/img/bad2-g16i.gif.bad
 decode build/img/bad2-g2.gif build/img/bad2-g2.gif.bad
 decode build/img/bad2-g256.gif build/img/bad2-g256.gif.bad
 decode build/img/bad2-g256i.gif build/img/bad2-g256i.gif.bad
+decode build/img/bad2-ganim.gif build/img/bad2-ganim.gif.bad
+decode build/img/bad2-ganimd1.gif build/img/bad2-ganimd1.gif.bad
+decode build/img/bad2-ganimd2.gif build/img/bad2-ganimd2.gif.bad
+decode build/img/bad2-ganimd3.gif build/img/bad2-ganimd3.gif.bad
 decode build/img/bad2-gbig.gif build/img/bad2-gbig.gif.bad
 decode build/img/bad2-gtrans.gif build/img/bad2-gtrans.gif.bad
 decode build/img/bad2-i1.ico build/img/bad2-i1.ico.bad
@@ -204,6 +216,10 @@ decode build/img/cut30-g16i.gif build/img/cut30-g16i.gif.bad
 decode build/img/cut30-g2.gif build/img/cut30-g2.gif.bad
 decode build/img/cut30-g256.gif build/img/cut30-g256.gif.bad
 decode build/img/cut30-g256i.gif build/img/cut30-g256i.gif.bad
+decode build/img/cut30-ganim.gif build/img/cut30-ganim.gif.bad
+decode build/img/cut30-ganimd1.gif build/img/cut30-ganimd1.gif.bad
+decode build/img/cut30-ganimd2.gif build/img/cut30-ganimd2.gif.bad
+decode build/img/cut30-ganimd3.gif build/img/cut30-ganimd3.gif.bad
 decode build/img/cut30-gbig.gif build/img/cut30-gbig.gif.bad
 decode build/img/cut30-gtrans.gif build/img/cut30-gtrans.gif.bad
 decode build/img/cut30-i1.ico build/img/cut30-i1.ico.bad
@@ -270,6 +286,10 @@ decode build/img/cut70-g16i.gif build/img/cut70-g16i.gif.bad
 decode build/img/cut70-g2.gif build/img/cut70-g2.gif.bad
 decode build/img/cut70-g256.gif build/img/cut70-g256.gif.bad
 decode build/img/cut70-g256i.gif build/img/cut70-g256i.gif.bad
+decode build/img/cut70-ganim.gif build/img/cut70-ganim.gif.bad
+decode build/img/cut70-ganimd1.gif build/img/cut70-ganimd1.gif.bad
+decode build/img/cut70-ganimd2.gif build/img/cut70-ganimd2.gif.bad
+decode build/img/cut70-ganimd3.gif build/img/cut70-ganimd3.gif.bad
 decode build/img/cut70-gbig.gif build/img/cut70-gbig.gif.bad
 decode build/img/cut70-gtrans.gif build/img/cut70-gtrans.gif.bad
 decode build/img/cut70-i1.ico build/img/cut70-i1.ico.bad
@@ -336,6 +356,10 @@ decode build/img/cut97-g16i.gif build/img/cut97-g16i.gif.bad
 decode build/img/cut97-g2.gif build/img/cut97-g2.gif.bad
 decode build/img/cut97-g256.gif build/img/cut97-g256.gif.bad
 decode build/img/cut97-g256i.gif build/img/cut97-g256i.gif.bad
+decode build/img/cut97-ganim.gif build/img/cut97-ganim.gif.bad
+decode build/img/cut97-ganimd1.gif build/img/cut97-ganimd1.gif.bad
+decode build/img/cut97-ganimd2.gif build/img/cut97-ganimd2.gif.bad
+decode build/img/cut97-ganimd3.gif build/img/cut97-ganimd3.gif.bad
 decode build/img/cut97-gbig.gif build/img/cut97-gbig.gif.bad
 decode build/img/cut97-gtrans.gif build/img/cut97-gtrans.gif.bad
 decode build/img/cut97-i1.ico build/img/cut97-i1.ico.bad
@@ -402,6 +426,10 @@ decode build/img/g16i.gif build/img/g16i.gif.argb
 decode build/img/g2.gif build/img/g2.gif.argb
 decode build/img/g256.gif build/img/g256.gif.argb
 decode build/img/g256i.gif build/img/g256i.gif.argb
+decode build/img/ganim.gif build/img/ganim.gif.argb
+decode build/img/ganimd1.gif build/img/ganimd1.gif.argb
+decode build/img/ganimd2.gif build/img/ganimd2.gif.argb
+decode build/img/ganimd3.gif build/img/ganimd3.gif.argb
 decode build/img/gbig.gif build/img/gbig.gif.argb
 decode build/img/gtrans.gif build/img/gtrans.gif.argb
 decode build/img/i1.ico build/img/i1.ico.argb

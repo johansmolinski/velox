@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Compare what Velox decoded (DIR/NAME.argb: width.l, height.l, ARGB
 pixels, big-endian) with PIL's decoding of DIR/NAME.  Lossless formats
-must match exactly; lossy ones (JPEG, lossy WebP) within a tolerance."""
+must match exactly; lossy ones (JPEG, lossy WebP) within a tolerance.
+An animated GIF's frames after the first (NAME.argb.fN) are compared
+with PIL's frames, composited as it does."""
 import glob
 import os
 import struct
@@ -57,4 +59,22 @@ for out in sorted(glob.glob(os.path.join(d, "*.argb"))):
     ok = (mean <= 3.0 and worst <= 60) if lossy else worst == 0
     print("%s %s%s %dx%d mean %.2f max %d" % ("PASS" if ok else "FAIL", name, " 1/%d" % scale if scale > 1 else "", w, h, mean, worst))
     fail |= not ok
+for out in sorted(glob.glob(os.path.join(d, "*.argb.f*"))):
+    base, k = out.rsplit(".f", 1)
+    src = base[:-5]
+    k = int(k)
+    data = open(out, "rb").read()
+    w, h = struct.unpack(">II", data[:8])
+    ref = Image.open(src)
+    ref.seek(k)
+    rp = ref.convert("RGBA").tobytes()
+    worst = 0
+    for i in range(w * h):
+        a, r, g, b = data[8 + 4 * i:12 + 4 * i]
+        R, G, B, A = rp[4 * i:4 * i + 4]
+        if A == 0 and a == 0:
+            continue
+        worst = max(worst, abs(r - R), abs(g - G), abs(b - B), abs(a - A))
+    print("%s %s frame %d %dx%d max %d" % ("PASS" if worst == 0 else "FAIL", os.path.basename(src), k, w, h, worst))
+    fail |= worst != 0
 sys.exit(fail)

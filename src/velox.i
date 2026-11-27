@@ -533,7 +533,20 @@ im_BitMap	rs.l	1		; our bitmap
 im_Mask		rs.l	1		; its mask plane (set: drawn) or 0
 im_W		rs.w	1
 im_H		rs.w	1
+im_Frames	rs.l	1		; an animation's frames (as g_DecFrames)
+					; or 0; im_BitMap, im_Mask: the one shown
+im_Cur		rs.l	1		; ... the one shown,
+im_Due		rs.l	1		; ... the tick of the next,
+im_Done		rs.l	1		; ... the tick it last changed
 IMG_SIZEOF	rs.b	0
+
+	RSRESET				; an animation's frame
+fr_BitMap	rs.l	1
+fr_Mask		rs.l	1
+fr_Ticks	rs.l	1		; how long it shows (1/10 s)
+FR_SIZEOF	rs.b	0
+MAX_FRAMES	equ	64		; frames at most
+FRAMES_CHIP	equ	300*1024	; chip memory for them at most
 
 ; a background image (img.s); its ImageInfo is where a node's n_Data2
 ; is, so that AddImage serves both
@@ -881,6 +894,7 @@ g_CacheMax	rs.l	1
 ; kept-alive connection
 ; settings
 g_HomeUrl	rs.b	256		; Velox/Home / HOME tooltype, or empty
+g_AcceptLang	rs.b	64		; Velox/Language (Accept-Language)
 g_StartUrl	rs.b	256		; URL tooltype
 g_PubScreen	rs.b	64		; PUBSCREEN / Velox/PubScreen, or empty
 g_LogName	rs.b	128		; LOG tooltype
@@ -935,6 +949,16 @@ g_GifY		rs.l	1		; row being decoded
 g_GifPass	rs.l	1		; interlace pass
 g_GifStep	rs.l	1		; rows to the next one
 g_LzwClear	rs.l	1		; the clear code
+g_GifPos	rs.l	1		; where the next image begins, or 0
+g_GifCW		rs.l	1		; the canvas's size (the screen's)
+g_GifCH		rs.l	1
+g_GifHasG	rs.l	1		; a global colour table (g_GifGPal)
+g_GifDelay	rs.l	1		; the image's delay (1/100 s),
+g_GifDisp	rs.l	1		; ... its disposal,
+g_GifPrevD	rs.l	1		; ... the one before's
+g_GifSave	rs.l	1		; the canvas kept (disposal 3) or 0
+g_DecFrames	rs.l	1		; img.s: an animation's frames (AllocVec:
+					; count.l, then fr_xxx each) or 0
 g_PngW		rs.l	1		; png.s: IHDR
 g_PngH		rs.l	1
 g_PngDepth	rs.l	1
@@ -1133,6 +1157,7 @@ g_8FTab		rs.w	4312		; vp8.s: the loop filter's tables
 g_BandsNew	rs.l	BANDS_MAX	; ... and of the runs now
 g_Vis		rs.l	VIS_MAX		; indexes of the runs being painted
 g_GifPal	rs.l	256		; colour table, as ARGB
+g_GifGPal	rs.l	256		; ... the global one
 g_DitTab	rs.b	3*5*4*256	; dither tables (picbm.s)
 g_C2pLo		rs.l	256		; c2p: a pen's bits, planes 0-3,
 g_C2pHi		rs.l	256		; ... 4-7 (just after)

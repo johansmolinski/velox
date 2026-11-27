@@ -107,6 +107,7 @@ A setting is a tool type in Velox's icon or an environment variable, set with Se
   DOWNLOADDIR=drawer  Velox/DownloadDir  where downloads go (RAM:)
   NOIMAGES            Velox/NoImages     load no images
   PUBSCREEN=name      Velox/PubScreen    open on that public screen
+                      Velox/Language     languages asked for (en; sv,en;q=0.8)
                       Velox/CacheDir     the disk cache (PROGDIR:Cache)
                       Velox/CacheSize    its size in KB (16384; 0: none)
                       Velox/KeepPages    pages kept for Back (4; 0: none)
@@ -262,7 +263,7 @@ Without AmiSSL, or to make https fast on a slow Amiga, run velox-proxy.py on a m
 @{b}What Velox shows@{ub}
 
   - HTML with a tolerant parser; UTF-8, Latin-1 and Windows-1252 pages
-  - CSS: selectors with specificity (also :not(), :is(), attributes, structural ones), colours (also rgb(), hsl() and calc() in them), custom properties with var(), flexbox (rows, columns, wrapping, grow, gaps, alignment, order), CSS grid (column templates with fr, minmax() and repeat(), named areas, lines and spans, gaps), <blink> and <marquee> (animated without flicker: only they are painted again), CSS tables (display: table and table-cell on any element), image sizes from CSS (width, height, max-width, max-height), borders (drawn solid, one colour per box), table heights, inline-block and inline-flex boxes, floated elements side by side, fonts, margins, padding, widths, alignment, display, floats, media queries, backgrounds; links styled as buttons look like buttons
+  - CSS: selectors with specificity (also :not(), :is(), attributes, structural ones), colours (also rgb(), hsl() and calc() in them), custom properties with var(), flexbox (rows, columns, wrapping, grow, gaps, alignment, order), CSS grid (column templates with fr, minmax() and repeat(), named areas, lines and spans, gaps), animated GIFs, <blink> and <marquee> (animated without flicker: only they are painted again), CSS tables (display: table and table-cell on any element), image sizes from CSS (width, height, max-width, max-height), borders (drawn solid, one colour per box), table heights, inline-block and inline-flex boxes, floated elements side by side, fonts, margins, padding, widths, alignment, display, floats, media queries, backgrounds; links styled as buttons look like buttons
   - Tables, lists, preformatted text, headings, rules
   - Images: JPEG (also progressive), PNG (also with transparency), GIF and WebP (lossy and lossless) decoded by Velox, SVG drawn by it, dithered to the screen's colours; other formats through datatypes; background images
   - Forms: text fields, passwords, check boxes, radio buttons, selects, text areas, files to send (chosen with a file requester); GET and POST (also multipart/form-data, for uploads)

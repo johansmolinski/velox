@@ -1,4 +1,5 @@
-; anim: <blink> and <marquee> animate (the clock: anim.s), and only
+; anim: <blink>, <marquee> and an animated GIF animate (the clock:
+; anim.s), and only
 ; their rectangles are painted again
 Echo >VELOX:r/anim.txt "anim"
 Echo >VELOX:r/anim.start ""

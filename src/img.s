@@ -46,6 +46,7 @@ bmh_Height		equ	2
 	xref	G,BusyEvents,PicInfo,PicDecode,PicFree,PalInit,PicToBitMap,PicAlloc,BufAppend,BufClear,GuiStatus,GuiRelayout,GuiRefresh,GuiPageWidth,GuiPaintImage
 	xref	FmtDec,StrCopy,LogEvent,ImgNetHook
 	xref	Hex8,StrIPrefix,BufAppendStr,BufAppendByte,DomNewNode,DomAddAttr
+	xref	GifNext,GifEnd,PicFreeMem
 	xref	AtSrc,AtWidth,AtHeight,TabRec,DomAppend
 
 MAX_IMAGES	equ	32767		; <img>s a page (PfWalk counts with dbf)
@@ -104,9 +105,7 @@ ImgWalk:
 	cmp.w	#TAG_IMG,n_Tag(a3)
 	bne.s	.down
 	move.l	a3,a0
-	lea	AnSrc(pc),a1
-	jsr	DomGetAttr
-	tst.l	d0
+	bsr	ImgSrc
 	beq.s	.next
 .q:	move.l	g_ImgCount(a4),d0
 	cmp.l	#MAX_IMAGES,d0
@@ -753,8 +752,7 @@ ShareImage:
 	addq.l	#1,d2
 	tst.l	n_Data2(a2)
 	bne.s	.l
-	lea	AnSrc(pc),a1
-	bsr.s	SameAttr
+	bsr	SameSrc
 	beq.s	.l
 	move.l	a5,-(sp)
 	move.l	a2,a5
@@ -770,17 +768,43 @@ ShareImage:
 .x:	movem.l	(sp)+,d2-d4/a2-a3
 	rts
 
-; SameAttr - do <img> a5 and a2 have the same attribute a1 (or neither)?
-; Out: d0 = 1 if so (CCR set)
-SameAttr:
-	move.l	a1,-(sp)
-	move.l	a5,a0
-	jsr	DomGetAttr
-	move.l	(sp),a1
-	move.l	d0,(sp)
+; ImgSrc - the URL of <img> a0: its data-src (or data-lazy-src,
+; data-original: what a site's script would put in its src), else src
+; Out: d0 = it (the attribute's text) or 0 (CCR set)
+ImgSrc:	movem.l	a2-a3,-(sp)
+	move.l	a0,a2
+	lea	LazyNames(pc),a3
+.l:	tst.b	(a3)
+	beq.s	.src
 	move.l	a2,a0
+	move.l	a3,a1
 	jsr	DomGetAttr
-	move.l	(sp)+,a1		; a1 = a5's, a0 = a2's
+	tst.l	d0
+	beq.s	.n
+	move.l	d0,a0
+	tst.b	(a0)
+	bne.s	.x
+.n:	tst.b	(a3)+
+	bne.s	.n
+	bra.s	.l
+.src:	move.l	a2,a0
+	lea	AnSrc(pc),a1
+	jsr	DomGetAttr
+.x:	movem.l	(sp)+,a2-a3
+	tst.l	d0
+	rts
+LazyNames:	dc.b	"data-src",0,"data-lazy-src",0,"data-original",0,0
+	even
+
+; SameSrc - do <img> a5 and a2 have the same URL (ImgSrc; or neither)?
+; Out: d0 = 1 if so (CCR set)
+SameSrc:
+	move.l	a5,a0
+	bsr.s	ImgSrc
+	move.l	d0,-(sp)
+	move.l	a2,a0
+	bsr.s	ImgSrc
+	move.l	(sp)+,a1		; a1 = a5's, d0 = a2's
 	move.l	d0,a0
 	move.l	a1,d1
 	beq.s	.n1
@@ -975,7 +999,16 @@ DecReap:
 	lea	DecodeWork(pc),a0
 	cmp.l	g_DecJob(a4),a0
 	beq.s	.dt
-	move.l	d0,-(sp)		; Velox's decoders: a bitmap and its
+	move.l	g_DecFrames(a4),d1	; an animation: all its frames
+	beq.s	.one
+	clr.l	g_DecFrames(a4)
+	move.l	d1,a0
+	move.l	g_PbmW(a4),d0
+	move.l	g_PbmH(a4),d1
+	bsr	FramesFree
+	clr.l	g_PbmMask(a4)
+	bra.s	.nobj
+.one:	move.l	d0,-(sp)		; Velox's decoders: a bitmap and its
 	GFX	WaitBlit		; mask
 	move.l	(sp)+,a0
 	GFX	FreeBitMap
@@ -1071,9 +1104,7 @@ ImgUrlKey:
 	moveq	#1,d0
 	bra.s	.x
 .url:	move.l	a5,a0
-	lea	AnSrc(pc),a1
-	jsr	DomGetAttr
-	tst.l	d0
+	bsr	ImgSrc
 	beq.s	.x
 	move.l	d0,a1
 	lea	g_PageUrl(a4),a0
@@ -1285,7 +1316,11 @@ DecodeOwn:
 	clr.l	g_PbmKeep(a4)
 	tst.l	d7
 	beq.s	.nokeep
-	bsr	ImgStore
+	tst.l	g_DecFrames(a4)		; (an animation: not kept, its
+	beq.s	.st			;  frames are not)
+	jsr	PbmKeepFree
+	bra.s	.nokeep
+.st:	bsr	ImgStore
 .nokeep:
 	bsr	Ticks
 	move.l	d0,-(sp)
@@ -1306,15 +1341,28 @@ DecodeOwn:
 	beq.s	.fail
 	move.l	g_PbmMask(a4),a0
 	bsr	AddImage
+	beq.s	.x
+	move.l	g_DecFrames(a4),d1	; an animation: its frames
+	beq.s	.x
+	clr.l	g_DecFrames(a4)
+	move.l	n_Data2(a5),a0
+	move.l	d1,im_Frames(a0)
+	move.l	d1,a1			; (the first's time from now)
+	move.l	4+fr_Ticks(a1),d1
+	add.l	g_AnimTicks(a4),d1
+	move.l	d1,im_Due(a0)
 	bra.s	.x
 .fail:	moveq	#0,d0
-.x:	movem.l	(sp)+,d2-d7/a2-a3
+.x:	tst.l	d0			; (the result: its CCR)
+	movem.l	(sp)+,d2-d7/a2-a3
 	rts
 
 ; PicWork - (a job for BgRun) decode the body, make the bitmap of
 ; g_DecW x g_DecH: g_DecObj = bitmap (g_PbmMask its mask) or 0
 PicWork:
 	clr.l	g_DecObj(a4)
+	clr.l	g_DecFrames(a4)
+	clr.l	g_GifPos(a4)		; (a GIF sets it: frames may follow)
 	move.l	g_DecBody+buf_Data(a4),a0
 	move.l	g_DecBody+buf_Len(a4),d0
 	move.l	g_DecWant(a4),d1
@@ -1330,8 +1378,132 @@ PicWork:
 	move.l	g_DecH(a4),d1
 	jsr	PicToBitMap
 	move.l	d0,g_DecObj(a4)
-.nb:	jsr	PicFree
+	beq.s	.nb
+	tst.l	g_GifPos(a4)		; an animated GIF: its frames
+	beq.s	.nb
+	bsr	Frames
+.nb:	jsr	GifEnd
+	jsr	PicFree
 .x:	rts
+
+;--------------------------------------------------------------------
+; Frames - (PicWork, the decoder process) the frames of an animated GIF
+; as bitmaps, the first one made already (g_DecObj, g_PbmMask): into
+; g_DecFrames if there are two or more (MAX_FRAMES at most, as many as
+; FRAMES_CHIP and the chip memory free allow)
+;--------------------------------------------------------------------
+Frames:
+	movem.l	d2-d6/a2,-(sp)
+	move.l	#4+MAX_FRAMES*FR_SIZEOF,d0
+	jsr	PicAlloc
+	tst.l	d0
+	beq	.x
+	move.l	d0,a2			; a2 = the table
+	move.l	g_DecObj(a4),4+fr_BitMap(a2)	; the first
+	move.l	g_PbmMask(a4),4+fr_Mask(a2)
+	bsr	.ticks
+	move.l	d0,4+fr_Ticks(a2)
+	moveq	#1,d2			; d2 = frames
+	move.l	g_PbmMask(a4),d4	; (the first's mask and kept pixels:
+	move.l	g_PbmSave(a4),d5	;  back after)
+	clr.l	g_PbmSave(a4)
+	move.l	g_PbmKeep(a4),d6
+	clr.l	g_PbmKeep(a4)
+	move.l	g_DecW(a4),d3		; d3 = a frame's chip bytes, about:
+	add.l	#15,d3			; its planes and mask
+	lsr.l	#3,d3
+	mulu.l	g_DecH(a4),d3
+	move.l	g_PalDepth(a4),d0
+	cmp.l	#8,d0
+	bls.s	.d
+	moveq	#8,d0			; (true colour: in fast memory, as
+.d:	addq.l	#1,d0			;  if 8)
+	mulu.l	d0,d3
+.l:	cmp.l	#MAX_FRAMES,d2
+	bhs.s	.e
+	move.l	d3,d0			; room for one more?
+	mulu.l	d2,d0
+	cmp.l	#FRAMES_CHIP,d0
+	bhi.s	.e
+	move.l	#MEMF_CHIP|MEMF_LARGEST,d1
+	EXEC	AvailMem
+	move.l	d3,d1
+	add.l	#CHIP_RESERVE,d1
+	cmp.l	d1,d0
+	blo.s	.e
+	move.l	g_DecBody+buf_Data(a4),a0	; the next onto the canvas
+	move.l	g_DecBody+buf_Len(a4),d0
+	jsr	GifNext
+	beq.s	.e
+	move.l	g_DecW(a4),d0
+	move.l	g_DecH(a4),d1
+	jsr	PicToBitMap
+	tst.l	d0
+	beq.s	.e
+	move.l	d2,d1
+	mulu.w	#FR_SIZEOF,d1
+	lea	4(a2,d1.l),a0
+	move.l	d0,fr_BitMap(a0)
+	move.l	g_PbmMask(a4),fr_Mask(a0)
+	move.l	a0,-(sp)
+	bsr.s	.ticks
+	move.l	(sp)+,a0
+	move.l	d0,fr_Ticks(a0)
+	addq.l	#1,d2
+	bra.s	.l
+.e:	move.l	d4,g_PbmMask(a4)
+	move.l	d5,g_PbmSave(a4)
+	move.l	d6,g_PbmKeep(a4)
+	cmp.l	#2,d2
+	bhs.s	.yes
+	move.l	a2,a1			; one: no animation
+	jsr	PicFreeMem
+	bra.s	.x
+.yes:	move.l	d2,(a2)
+	move.l	a2,g_DecFrames(a4)
+.x:	movem.l	(sp)+,d2-d6/a2
+	rts
+.ticks:	move.l	g_GifDelay(a4),d0	; 1/100 s to ticks, 1 at least (as
+	addq.l	#5,d0			;  browsers: 0 and 1 are fast)
+	divu.w	#10,d0
+	and.l	#$ffff,d0
+	bne.s	.t1
+	moveq	#1,d0
+.t1:	rts
+
+;--------------------------------------------------------------------
+; FramesFree - the frames a0 (as g_DecFrames; 0: none) of an image d0 x
+; d1 pixels, their bitmaps and masks, and the table
+;--------------------------------------------------------------------
+FramesFree:
+	movem.l	d2-d4/a2,-(sp)
+	move.l	d0,d3			; d3/d4 = the size
+	move.l	d1,d4
+	move.l	a0,d0
+	beq.s	.x
+	move.l	a0,a2
+	GFX	WaitBlit
+	move.l	(a2),d2
+	lea	4(a2),a0
+	bra.s	.e
+.l:	move.l	a0,-(sp)
+	move.l	fr_BitMap(a0),a0
+	GFX	FreeBitMap
+	move.l	(sp),a0
+	move.l	fr_Mask(a0),d0
+	beq.s	.nm
+	move.l	d0,a0
+	move.l	d3,d0
+	move.l	d4,d1
+	GFX	FreeRaster
+.nm:	move.l	(sp)+,a0
+	lea	FR_SIZEOF(a0),a0
+.e:	subq.l	#1,d2
+	bpl.s	.l
+	move.l	a2,a1
+	EXEC	FreeVec
+.x:	movem.l	(sp)+,d2-d4/a2
+	rts
 
 ; PicTile - the decoded image repeated to g_DecW x g_DecH (a multiple
 ; of its size); Out: d0 = 0 if out of memory (CCR set)
@@ -1578,6 +1750,10 @@ AddImage:
 	move.l	a1,im_Mask(a0)
 	move.w	d4,im_W(a0)
 	move.w	d5,im_H(a0)
+	clr.l	im_Frames(a0)		; (DecodeOwn: an animation's)
+	clr.l	im_Cur(a0)
+	clr.l	im_Due(a0)
+	clr.l	im_Done(a0)
 	move.l	g_ImgList(a4),im_Next(a0)	; for ImagesFree
 	move.l	a0,g_ImgList(a4)
 	move.l	a0,n_Data2(a5)
@@ -1593,7 +1769,16 @@ AddImage:
 	jsr	LogEvent
 	moveq	#1,d0
 	rts
-.nomem:	move.l	a1,d0
+.nomem:	move.l	g_DecFrames(a4),d0	; an animation's frames: all of them
+	beq.s	.nf			; (the first too)
+	clr.l	g_DecFrames(a4)
+	move.l	d0,a0
+	move.l	d4,d0
+	move.l	d5,d1
+	bsr	FramesFree
+	moveq	#0,d0
+	rts
+.nf:	move.l	a1,d0
 	beq.s	.nm
 	move.l	d0,a0
 	move.l	d4,d0
@@ -1755,7 +1940,16 @@ ImgListFree:
 .l:	move.l	a2,d0
 	beq.s	.x
 	bsr	FavForget
-	move.l	im_BitMap(a2),a0
+	move.l	im_Frames(a2),d0	; an animation: its frames
+	beq.s	.one
+	move.l	d0,a0
+	moveq	#0,d0
+	move.w	im_W(a2),d0
+	moveq	#0,d1
+	move.w	im_H(a2),d1
+	bsr	FramesFree
+	bra.s	.nm
+.one:	move.l	im_BitMap(a2),a0
 	GFX	FreeBitMap
 	move.l	im_Mask(a2),d0
 	beq.s	.nm
@@ -1855,9 +2049,7 @@ InlineIs:
 	cmp.w	#TAG_SVG,n_Tag(a5)
 	beq.s	.x
 	move.l	a5,a0
-	lea	AnSrc(pc),a1
-	jsr	DomGetAttr
-	tst.l	d0
+	bsr	ImgSrc
 	beq.s	.x
 	move.l	d0,a0
 	lea	SData(pc),a1

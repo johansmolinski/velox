@@ -516,7 +516,12 @@ of 1/10 s out; the event loop sees it come back (CheckIO, its signal in
 the idle wait), and GuiAnimTick paints only those runs' rectangles again
 (PaintRect): blinking text every half second, marquees each tick, their
 text drawn where the tick count puts it, clipped by a region on the
-strip's layer. The clock stops when the page has nothing animated and a
+strip's layer. An animated GIF's frames are all made in the decoder
+process (gif.s GifNext draws each onto the canvas as the one before
+left it: disposals 2 and 3; then each is dithered into a bitmap, 64 and
+300 KB of chip memory at most): the ImageInfo holds them (im_Frames)
+and shows the one due (im_BitMap, im_Mask), so painting is unchanged;
+such images are not put in the disk cache. strip's layer. The clock stops when the page has nothing animated and a
 repaint starts it again (AnimKick in GuiRefresh). Pages of frames and
 tabs behind do not animate.
 

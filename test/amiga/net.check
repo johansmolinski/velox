@@ -53,7 +53,7 @@ for name, want in (("b4", b"Authorization: Basic YWI6Yw=="), ("b5", b"Authorizat
         fail.append(f"{name}: no {want!r}")
 if b"401" not in out("noauth"):
     fail.append(f"noauth: {out('noauth')[:80]!r}")
-for h in ("Host: 127.0.0.1:8080", "Connection: keep-alive", "User-Agent: Velox/"):
+for h in ("Host: 127.0.0.1:8080", "Connection: keep-alive", "User-Agent: Mozilla/5.0 (Amiga", "Accept-Language: en"):
     if h not in echo:
         fail.append(f"echo: missing header {h}")
 rc("cookie", 0)

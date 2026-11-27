@@ -1,14 +1,19 @@
 ;
-; gif.s - GIF decoder (the first image; transparency; interlacing)
+; gif.s - GIF decoder (transparency; interlacing; the frames of an
+; animation one after another)
 ;
 ; The image is placed on the logical screen (the canvas, transparent
 ; where it does not cover it).  LZW codes are read LSB first from the
-; data sub-blocks, which are first joined into one buffer.
+; data sub-blocks, which are first joined into one buffer.  GifDecode
+; reads the first image; GifNext then each next one onto the same
+; canvas (as the one before left it: its disposal 2 clears its
+; rectangle, 3 puts the canvas back as it was before it), its delay in
+; g_GifDelay.  Transparent pixels are not written.
 ;
 
 	include	"velox.i"
 
-	xdef	GifInfo,GifDecode
+	xdef	GifInfo,GifDecode,GifNext,GifEnd
 	xref	PicNew,PicAlloc,PicFreeMem
 
 LZW_PREFIX	equ	0		; working memory: 4096 prefix codes,
@@ -49,40 +54,177 @@ NEED	MACRO
 	ENDM
 
 ;--------------------------------------------------------------------
-; GifDecode - In: a0 = data, d0 = length (at least 16)
-; Out: d0 = 1 if decoded (g_PicW/H/Data)
+; GifDecode - the first image
+; In: a0 = data, d0 = length (at least 16)
+; Out: d0 = 1 if decoded (g_PicW/H/Data; g_GifPos: where the next is)
 ;--------------------------------------------------------------------
 GifDecode:
-	movem.l	d2-d7/a2-a3/a5-a6,-(sp)
+	movem.l	d2/a2/a5,-(sp)
+	clr.l	g_GifPos(a4)
+	clr.l	g_GifPrevD(a4)
+	clr.l	g_GifSave(a4)
 	lea	(a0,d0.l),a5		; a5 = end
 	lea	6(a0),a2		; ("GIF89a")
+	LE16				; the canvas
+	move.l	d0,g_GifCW(a4)
+	LE16
+	move.l	d0,g_GifCH(a4)
+	move.b	(a2),d2			; flags
+	addq.l	#3,a2
+	clr.l	g_GifHasG(a4)
+	tst.b	d2
+	bpl.s	.img
+	bsr	ReadPal			; the global colour table (kept for
+	beq.s	.no			;  the frames after)
+	lea	g_GifPal(a4),a0
+	lea	g_GifGPal(a4),a1
+	move.w	#255,d0
+.cp:	move.l	(a0)+,(a1)+
+	dbf	d0,.cp
+	st	g_GifHasG+3(a4)
+.img:	bsr	GifImage
+	cmp.l	#1,d0
+	beq.s	.x
+.no:	moveq	#0,d0
+.x:	movem.l	(sp)+,d2/a2/a5
+	rts
+
+;--------------------------------------------------------------------
+; GifNext - the next image of an animation onto the canvas (GifDecode
+; first, on the same data)
+; In: a0 = data, d0 = length
+; Out: d0 = 1 if one came (g_GifDelay), 0 if none (CCR set)
+;--------------------------------------------------------------------
+GifNext:
+	movem.l	a2/a5,-(sp)
+	lea	(a0,d0.l),a5
+	move.l	g_GifPos(a4),d0
+	beq.s	.no
+	move.l	d0,a2
+	move.l	g_PicData(a4),d0
+	beq.s	.no
+	move.l	g_GifPrevD(a4),d0	; the one before: as it left it
+	cmp.l	#2,d0
+	bne.s	.n2
+	bsr	ClearPrev
+	bra.s	.go
+.n2:	cmp.l	#3,d0
+	bne.s	.go
+	move.l	g_GifSave(a4),d0	; (3: the canvas as it was; none kept:
+	bne.s	.rs			;  the first image's, empty before it)
+	bsr	ClearPrev
+	bra.s	.go
+.rs:	move.l	d0,a0
+	bsr	CopyCanvas
+.go:	bsr	GifImage
+	cmp.l	#1,d0
+	beq.s	.x
+.no:	clr.l	g_GifPos(a4)
+	moveq	#0,d0
+.x:	movem.l	(sp)+,a2/a5
+	tst.l	d0
+	rts
+
+;--------------------------------------------------------------------
+; GifEnd - (after the frames) the memory GifNext kept
+;--------------------------------------------------------------------
+GifEnd:
+	move.l	g_GifSave(a4),a1
+	clr.l	g_GifSave(a4)
+	jmp	PicFreeMem
+
+; ClearPrev - (GifNext) the rectangle of the image before: transparent
+ClearPrev:
+	movem.l	d2-d3,-(sp)
+	move.l	g_GifTop(a4),d2
+	move.l	g_GifIH(a4),d3
+	bra.s	.e
+.r:	move.l	d2,d0
+	mulu.l	g_PicW(a4),d0
+	add.l	g_GifLeft(a4),d0
+	move.l	g_PicData(a4),a0
+	lea	(a0,d0.l*4),a0
+	move.l	g_GifIW(a4),d1
+	bra.s	.ce
+.c:	clr.l	(a0)+
+.ce:	dbf	d1,.c
+	addq.l	#1,d2
+.e:	dbf	d3,.r
+	movem.l	(sp)+,d2-d3
+	rts
+
+; CopyCanvas - (GifNext) the canvas from a0, or (a0 = 0) a copy of it
+; kept in g_GifSave (made the first time)
+CopyCanvas:
+	move.l	g_PicW(a4),d1
+	mulu.l	g_PicH(a4),d1
+	move.l	g_PicData(a4),a1
+	bra.s	.e
+.l:	move.l	(a0)+,(a1)+
+.e:	subq.l	#1,d1
+	bpl.s	.l
+	rts
+SaveCanvas:
+	move.l	g_GifSave(a4),d0
+	bne.s	.s
+	move.l	g_PicW(a4),d0
+	mulu.l	g_PicH(a4),d0
+	lsl.l	#2,d0
+	jsr	PicAlloc
+	move.l	d0,g_GifSave(a4)
+	beq.s	.x
+.s:	move.l	d0,a1
+	move.l	g_PicData(a4),a0
+	move.l	g_PicW(a4),d1
+	mulu.l	g_PicH(a4),d1
+	bra.s	.e
+.l:	move.l	(a0)+,(a1)+
+.e:	subq.l	#1,d1
+	bpl.s	.l
+.x:	rts
+
+;--------------------------------------------------------------------
+; GifImage - (GifDecode, GifNext) the next image from a2 (a5 = end):
+; its extensions (graphic control: transparency, delay, disposal),
+; then it onto the canvas (made the first time)
+; Out: d0 = 1 if decoded (g_GifPos after it), 2 if there is none (the
+;      trailer), 0 if broken
+;--------------------------------------------------------------------
+GifImage:
+	movem.l	d2-d7/a2-a3/a5-a6,-(sp)
 	sub.l	a3,a3			; joined data
 	moveq	#-1,d0
 	move.l	d0,g_GifTrans(a4)
-	LE16
-	move.l	d0,d6			; d6/d7 = canvas size
-	LE16
-	move.l	d0,d7
-	move.b	(a2),d2			; flags
-	addq.l	#3,a2
-	tst.b	d2
-	bpl.s	.blocks
-	bsr	ReadPal			; the global colour table
-	beq	.fail
+	clr.l	g_GifDelay(a4)
+	clr.l	g_GifDisp(a4)
+	move.l	g_GifCW(a4),d6		; d6/d7 = canvas size
+	move.l	g_GifCH(a4),d7
 .blocks:
 	NEED	1
 	move.b	(a2)+,d0
 	cmp.b	#$2c,d0			; an image
 	beq.s	.image
+	cmp.b	#$3b,d0			; the trailer: none more
+	beq	.none
 	cmp.b	#$21,d0			; an extension
-	bne	.fail			; (the trailer: no image)
+	bne	.fail
 	NEED	1
 	move.b	(a2)+,d0
-	cmp.b	#$f9,d0			; graphic control: transparency
-	bne.s	.skip
+	cmp.b	#$f9,d0			; graphic control: transparency,
+	bne.s	.skip			; delay, disposal
 	NEED	5
 	cmp.b	#4,(a2)
 	blo.s	.skip
+	moveq	#0,d0
+	move.b	1(a2),d0
+	lsr.b	#2,d0
+	and.b	#7,d0
+	move.l	d0,g_GifDisp(a4)
+	moveq	#0,d0
+	move.b	3(a2),d0
+	lsl.w	#8,d0
+	move.b	2(a2),d0
+	move.l	d0,g_GifDelay(a4)
 	btst	#0,1(a2)
 	beq.s	.skip
 	moveq	#0,d0
@@ -105,15 +247,37 @@ GifDecode:
 	move.b	(a2)+,d2		; flags
 	move.b	d2,g_GifFlags(a4)
 	tst.b	d2
-	bpl.s	.nolct
+	bpl.s	.glob
 	bsr	ReadPal			; a local colour table
 	beq	.fail
+	bra.s	.nolct
+.glob:	tst.l	g_GifHasG(a4)		; (else the global one: again, after
+	beq.s	.nolct			;  a local one)
+	lea	g_GifGPal(a4),a0
+	lea	g_GifPal(a4),a1
+	move.w	#255,d0
+.gp:	move.l	(a0)+,(a1)+
+	dbf	d0,.gp
 .nolct:	move.l	g_GifTrans(a4),d0	; the transparent colour
 	bmi.s	.canvas
 	lea	g_GifPal(a4),a0
 	clr.l	(a0,d0.l*4)
 .canvas:
-	; the canvas holds the image (a screen of 0 or too small grows)
+	tst.l	g_PicData(a4)		; a frame after the first: within the
+	beq.s	.new			; canvas there
+	move.l	g_GifLeft(a4),d0
+	add.l	g_GifIW(a4),d0
+	cmp.l	g_PicW(a4),d0
+	bhi	.fail
+	move.l	g_GifTop(a4),d0
+	add.l	g_GifIH(a4),d0
+	cmp.l	g_PicH(a4),d0
+	bhi	.fail
+	cmp.l	#3,g_GifDisp(a4)	; (3: the canvas kept to go back to)
+	bne.s	.lzw
+	bsr	SaveCanvas
+	bra.s	.lzw
+.new:	; the canvas holds the image (a screen of 0 or too small grows)
 	move.l	g_GifLeft(a4),d0
 	add.l	g_GifIW(a4),d0
 	cmp.l	d0,d6
@@ -128,7 +292,7 @@ GifDecode:
 	move.l	d7,d1
 	jsr	PicNew
 	beq	.fail
-	; LZW minimum code size, then the data sub-blocks, joined
+.lzw:	; LZW minimum code size, then the data sub-blocks, joined
 	NEED	1
 	moveq	#0,d5
 	move.b	(a2)+,d5
@@ -154,6 +318,7 @@ GifDecode:
 	dbf	d0,.jc
 	bra.s	.join
 .joined:
+	move.l	a2,g_GifPos(a4)		; (the next one: after it)
 	lea	LZW_SIZE(a3),a2		; a2/a5 = the codes
 	move.l	a1,a5
 	; the first row
@@ -252,7 +417,10 @@ GifDecode:
 .full:	addq.l	#4,sp
 	bra.s	.done
 .bad:	addq.l	#4,sp
-.done:	moveq	#1,d0			; (a short file shows what it has)
+.done:	move.l	g_GifDisp(a4),g_GifPrevD(a4)	; (for the next one)
+	moveq	#1,d0			; (a short file shows what it has)
+	bra.s	.x
+.none:	moveq	#2,d0
 	bra.s	.x
 .fail:	moveq	#0,d0
 .x:	move.l	d0,d2
@@ -327,8 +495,12 @@ RowStart:
 ; Put - pixel d0 (colour index) to a6
 ; Out: d0 = 0 when the image is complete (CCR set); a0/a1 kept
 Put:
-	move.l	g_GifPal(a4,d0.l*4),(a6)+
-	subq.l	#1,g_GifX(a4)
+	move.l	g_GifPal(a4,d0.l*4),d1	; (transparent: not written)
+	beq.s	.tr
+	move.l	d1,(a6)+
+	bra.s	.cnt
+.tr:	addq.l	#4,a6
+.cnt:	subq.l	#1,g_GifX(a4)
 	bne.s	.more
 	move.l	g_GifStep(a4),d0	; the next row
 	add.l	d0,g_GifY(a4)

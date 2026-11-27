@@ -291,6 +291,19 @@ LoadSettings:
 	ble.s	.keep
 	moveq	#1,d0
 	move.l	d0,g_Insecure(a4)
+	lea	VarLang(pc),a0		; Velox/Language: Accept-Language
+	move.l	a0,d1			; (default "en")
+	lea	g_AcceptLang(a4),a0
+	move.l	a0,d2
+	moveq	#63,d3
+	moveq	#0,d4
+	DOS	GetVar
+	tst.l	d0
+	bgt.s	.keep
+	lea	g_AcceptLang(a4),a1
+	move.b	#'e',(a1)+
+	move.b	#'n',(a1)+
+	clr.b	(a1)
 .keep:	lea	VarKeep(pc),a0		; Velox/KeepPages: pages kept for
 	move.l	a0,d1			; Back/Forward (0: none)
 	lea	g_VarBuf(a4),a0
@@ -316,6 +329,7 @@ VarDlDir:	dc.b	"Velox/DownloadDir",0
 VarNoImg:	dc.b	"Velox/NoImages",0
 VarHome:	dc.b	"Velox/Home",0
 VarPubScr:	dc.b	"Velox/PubScreen",0
+VarLang:	dc.b	"Velox/Language",0
 SRam:		dc.b	"RAM:",0
 	even
 

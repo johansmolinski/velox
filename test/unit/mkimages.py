@@ -236,6 +236,29 @@ ico("i4.ico", [(13, 11, 4, dib(icon(13, 11, False), 4))])
 ico("i1.ico", [(17, 11, 1, dib(icon(17, 11, False), 1))])
 save(picture(48, 48, alpha=True), "ipng.ico", sizes=[(16, 16), (32, 32), (48, 48)])
 
+# animated GIFs (gif.s GifNext): frames of the whole canvas, frames
+# that cover part of it with transparency, disposals 1, 2 and 3
+frames = []
+for k in range(5):
+    im = Image.new("RGB", (40, 30), (255, 255, 255))
+    dr = ImageDraw.Draw(im)
+    dr.rectangle((k * 7, 5, k * 7 + 10, 20), fill=(200, 30, 30))
+    dr.text((2, 18), str(k), fill=(0, 0, 200))
+    frames.append(im)
+frames[0].save(os.path.join(d, "ganim.gif"), save_all=True, append_images=frames[1:],
+               duration=[100, 200, 50, 300, 100], loop=0)
+for disp in (1, 2, 3):
+    fr = []
+    for k in range(4):
+        im = Image.new("RGBA", (32, 24), (0, 0, 0, 0))
+        dr = ImageDraw.Draw(im)
+        dr.ellipse((k * 5, k * 3, k * 5 + 12, k * 3 + 12), fill=(30, 160, 60, 255))
+        if k == 0:
+            dr.rectangle((0, 20, 31, 23), fill=(250, 200, 0, 255))
+        fr.append(im)
+    fr[0].save(os.path.join(d, "ganimd%d.gif" % disp), save_all=True, append_images=fr[1:],
+               duration=80, loop=0, disposal=disp, transparency=0, optimize=False)
+
 # broken files: cut short, and with bytes overwritten; decoding them
 # must not crash (their output is not compared: ".bad")
 random.seed(11)

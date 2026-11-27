@@ -77,9 +77,10 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
   tabs below the toolbar, each with its page's icon (favicon: ICO, PNG,
   SVG..., kept in the disk cache at the size shown): a click shows one,
   its close box or the middle button closes it, `+` opens one
-- `<blink>` (and `text-decoration: blink`) and `<marquee>` (`direction`,
-  `behavior=alternate`, `scrollamount`): a timer animates them while
-  the page is shown, and only their rectangles are painted again
+- Animated GIFs, `<blink>` (and `text-decoration: blink`) and
+  `<marquee>` (`direction`, `behavior=alternate`, `scrollamount`): a
+  timer animates them while the page is shown, and only their
+  rectangles are painted again
 - Image maps: client side (`usemap`, `<area>` rectangles, circles,
   polygons; Tab steps through the areas) and server side (`ismap`)
 - Keyboard navigation for everything; keys typed while a page loads
@@ -110,6 +111,7 @@ parentheses to enable one) or environment variables
 | `DOWNLOADDIR=drawer` | `Velox/DownloadDir` | where downloads go (default `RAM:`) |
 | `NOIMAGES`           | `Velox/NoImages`    | do not load images                  |
 | `PUBSCREEN=name`     | `Velox/PubScreen`   | open on that public screen          |
+|                      | `Velox/Language`    | the languages asked for (`Accept-Language`, default `en`; e.g. `sv,en;q=0.8`) |
 |                      | `Velox/CacheDir`    | disk cache drawer (default `PROGDIR:Cache`) |
 |                      | `Velox/CacheSize`   | disk cache size in KB (default 16384, 0: none) |
 |                      | `Velox/KeepPages`   | pages kept in memory for Back/Forward (default 4, 0: none) |

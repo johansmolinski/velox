@@ -441,7 +441,15 @@ BuildRequest:
 	lea	g_CondLM(a4),a1
 	jsr	BufAppendStr
 	beq	ReqNoMem
-.ncl:	REQSTR	RqTail
+.ncl:	REQSTR	RqTail			; (the language: Velox/Language)
+	lea	g_ReqBuf(a4),a0
+	lea	g_AcceptLang(a4),a1
+	tst.b	(a1)
+	bne.s	.lang
+	lea	RqLangEn(pc),a1		; (not set: English)
+.lang:	jsr	BufAppendStr
+	beq	ReqNoMem
+	REQSTR	RqTail2
 	move.l	g_PostData(a4),d0	; the body follows the headers
 	beq.s	.done
 	lea	g_ReqBuf(a4),a0
@@ -497,11 +505,15 @@ RqMultiHdr:	dc.b	13,10,"Content-Type: multipart/form-data; boundary=",0
 RqPostHdr:	dc.b	13,10,"Content-Type: application/x-www-form-urlencoded"
 RqLenHdr:	dc.b	13,10,"Content-Length: ",0
 RqHost:		dc.b	" HTTP/1.1",13,10,"Host: ",0
-RqTail:		dc.b	13,10
-		dc.b	"User-Agent: Velox/"
+RqTail:		dc.b	13,10			; (sites look for "Mozilla/5.0")
+		dc.b	"User-Agent: Mozilla/5.0 (Amiga; AmigaOS 3; 68k) Velox/"
 		VERSION_STR
-		dc.b	" (AmigaOS; 68k)",13,10
-		dc.b	"Accept: text/html,text/plain;q=0.9,*/*;q=0.5",13,10
+		dc.b	13,10
+		dc.b	"Accept: text/html,application/xhtml+xml,text/plain;q=0.9,"
+		dc.b	"image/webp,image/svg+xml,*/*;q=0.5",13,10
+		dc.b	"Accept-Language: ",0
+RqLangEn:	dc.b	"en",0
+RqTail2:	dc.b	13,10
 		dc.b	"Accept-Encoding: identity",13,10
 		dc.b	"Connection: keep-alive",13,10,13,10,0
 	even

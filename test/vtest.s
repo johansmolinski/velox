@@ -28,7 +28,7 @@
 	xref	PutStr,PutBuf,PutNum,PutNL,PutChar,FlushOut,ErrorText
 	xref	PageNew,BufAppend,BufReserve,BufClear,CharsetDetect,DecodeCharset
 	xref	HtmlParse,HtmlBegin,HtmlMore,TagNameOf,LayoutDocument,RunCount,RunPtr,ParseDec,CssLoad
-	xref	Inflate,PicInfo,PicDecode,PicFree,PicAlloc,PicFreeMem
+	xref	Inflate,PicInfo,PicDecode,PicFree,PicAlloc,PicFreeMem,GifNext,GifEnd,FmtDec
 	xref	CookieSet,CookieHeader,UrlParse,BufFree,PageFixups,PfBuild,PfApply
 	xref	CssAddSheet,CssInvalidate,PageAlloc,KeepCopy,Alloc,Free
 	xref	TabSave,TabLoad
@@ -448,16 +448,77 @@ CmdDecode:
 	DOS	Write
 	move.l	d4,d1
 	DOS	Close
+	tst.l	g_GifPos(a4)		; an animated GIF: its frames too,
+	beq.s	.free			; OUT.f1, OUT.f2 ...
+	move.l	a2,T_FrData
+	move.l	d5,T_FrLen
+	bsr	Frames
 	bra.s	.free
 .fail:	lea	MsgNotDecoded(pc),a0
 	jsr	PutStr
-.free:	jsr	PicFree
+.free:	jsr	GifEnd
+	jsr	PicFree
 	move.l	a2,a1
 	jsr	PicFreeMem
 	movem.l	(sp)+,d2-d6/a2
 	rts
 .err:	movem.l	(sp)+,d2-d6/a2
 	bra	PutError
+
+; Frames - (CmdDecode, data T_FrData, T_FrLen) an animation's frames
+; after the first (GifNext), each to OUT.fN; " frames N" if more than
+; one
+Frames:
+	movem.l	d2-d4,-(sp)
+	moveq	#1,d0
+	move.l	d0,T_FrN
+.l:	cmp.l	#64,T_FrN
+	bhs.s	.e
+	move.l	T_FrData,a0
+	move.l	T_FrLen,d0
+	jsr	GifNext
+	beq.s	.e
+	lea	T_FrName,a1		; OUT.fN
+	move.l	T_Words+8,a0
+.cp:	move.b	(a0)+,(a1)+
+	bne.s	.cp
+	subq.l	#1,a1
+	move.b	#'.',(a1)+
+	move.b	#'f',(a1)+
+	move.l	a1,a0
+	move.l	T_FrN,d0
+	jsr	FmtDec
+	clr.b	(a0)
+	move.l	#T_FrName,d1
+	move.l	#MODE_NEWFILE,d2
+	DOS	Open
+	move.l	d0,d4
+	beq.s	.n
+	move.l	d4,d1
+	lea	g_PicW(a4),a0
+	move.l	a0,d2
+	moveq	#8,d3
+	DOS	Write
+	move.l	g_PicW(a4),d3
+	mulu.l	g_PicH(a4),d3
+	lsl.l	#2,d3
+	move.l	d4,d1
+	move.l	g_PicData(a4),d2
+	DOS	Write
+	move.l	d4,d1
+	DOS	Close
+.n:	addq.l	#1,T_FrN
+	bra.s	.l
+.e:	cmp.l	#2,T_FrN
+	blo.s	.x
+	lea	MsgFrames(pc),a0
+	jsr	PutStr
+	move.l	T_FrN,d0
+	jsr	PutNum
+.x:	movem.l	(sp)+,d2-d4
+	rts
+MsgFrames:	dc.b	" frames ",0
+	even
 
 CmdInflate:
 	movem.l	d2-d6/a2-a3,-(sp)
@@ -1651,6 +1712,10 @@ CmdComplete:
 G:		ds.b	g_SIZEOF
 T_Conn:		ds.l	1
 T_Buf:		ds.b	BUF_SIZEOF
+T_FrData:	ds.l	1		; Frames: the file,
+T_FrLen:	ds.l	1
+T_FrN:		ds.l	1		; ... frames so far,
+T_FrName:	ds.b	256		; ... a frame's file
 T_Sums:		ds.l	8		; PageSum: its parts (DOM, runs), before and now
 T_NoBody:	ds.b	2
 T_Words:	ds.l	T_MAXWORDS

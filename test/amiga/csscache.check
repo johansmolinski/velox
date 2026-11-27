@@ -9,6 +9,8 @@ set -- $h
 [ "$#" = 2 ] && [ "$1" = "$2" ] || { echo "heights differ: $h"; fail=1; }
 dh=$(sed -n 's/^difference: [0-9]*x//p' "$d/csscache.driver")
 [ -n "$dh" ] && [ "$dh" -le 1 ] || { echo "the page looks different"; fail=1; }
+grep -q '^kept from disk: 1$' "$d/csscache.driver" || { echo "not kept on disk"; fail=1; }
+grep -q '^difference from disk: 1x1$' "$d/csscache.driver" || { echo "from disk: it looks different"; fail=1; }
 grep -q '^ok$' "$d/csscache.driver" || fail=1
 grep -q '^exit rc=0' "$d/csscache.txt" || { echo "velox exit code"; fail=1; }
 exit $fail

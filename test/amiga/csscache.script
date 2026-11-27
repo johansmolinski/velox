@@ -1,7 +1,12 @@
 ; csscache: a linked style sheet parsed once is kept: a page with it
-; uses it (no parsing) and looks the same (test/amiga/csscache.host)
+; uses it (no parsing) and looks the same; so does the next time
+; Velox runs (from the disk cache) (test/amiga/csscache.host)
 Echo >VELOX:r/csscache.txt "csscache"
 Echo >VELOX:r/csscache.start ""
 VELOX:velox http://127.0.0.1:8080/csscache.html LOG=VELOX:r/csscache.log
 Echo >>VELOX:r/csscache.txt "exit rc=$RC"
+; again, a third page the same (no page file yet): the sheet kept on
+; disk (the disk cache), not parsed
+VELOX:velox http://127.0.0.1:8080/csscache3.html LOG=VELOX:r/csscache2.log
+Echo >>VELOX:r/csscache.txt "exit2 rc=$RC"
 Echo >>VELOX:r/csscache.txt "done"

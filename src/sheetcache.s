@@ -14,7 +14,8 @@
 ; same custom properties defined before it and the same root element
 ; (SheetEnv): var()s are replaced while a sheet is parsed, with the
 ; properties of rules for the root.  Blocks are kept in memory (the
-; latest used first, g_ShMax bytes at most) while Velox runs.
+; latest used first, SH_MAX bytes at most) while Velox runs, and in the
+; disk cache (as images are: DcStoreImg), for the next time.
 ;
 
 	include	"velox.i"
@@ -22,8 +23,10 @@
 	xdef	SheetFind,SheetLoad,SheetSave,SheetEnv,SheetFlush
 	xref	Alloc,Free,PageAlloc,BufAppend,BufFree,StrLen,DcHash
 	xref	AttrNames,AttrNamesEnd,InsertRule,VarInsert,RootElem
+	xref	DcLoadImg,DcStoreImg,DcImgFree
 
 SH_MAX		equ	768*1024	; bytes of blocks kept at most
+SH_KEY		equ	URL_MAX+32	; a disk cache key (ShKey)
 
 	RSRESET				; a kept sheet (Alloc)
 se_Next		rs.l	1
@@ -33,7 +36,10 @@ se_Env		rs.l	1		; ... of what was defined before it
 se_Url		rs.l	1		; (after the block)
 SE_SIZEOF	rs.b	0		; the block follows
 
+SH_MAGIC	equ	'VXS1'		; (the block's format: also in the
+					;  disk cache's key, ShKey)
 	RSRESET				; a block
+sh_Magic	rs.l	1
 sh_NRules	rs.l	1
 sh_NVars	rs.l	1
 sh_Index	rs.l	1		; offset of: rules, then custom
@@ -137,9 +143,93 @@ SheetFind:
 .nc:	move.l	d1,a1
 .n:	lea	se_Next(a1),a2
 	bra.s	.l
-.x:	movem.l	(sp)+,d2-d3/a2-a3
+.x:	tst.l	d0
+	bne.s	.r
+	move.l	a3,a0			; not in memory: on disk?
+	move.l	d2,d0
+	move.l	d3,d1
+	bsr	DiskFind
+.r:	movem.l	(sp)+,d2-d3/a2-a3
 	tst.l	d0
 	rts
+
+; DiskFind - (SheetFind) the block of URL a0, text hash d0, env d1 from
+; the disk cache, kept in memory again
+; Out: d0 = the kept sheet or 0
+DiskFind:
+	movem.l	d2-d4/a2-a3,-(sp)
+	move.l	a0,a3
+	move.l	d0,d2
+	move.l	d1,d3
+	lea	-SH_KEY(sp),sp
+	move.l	sp,a1
+	bsr	ShKey
+	move.l	sp,a0
+	jsr	DcLoadImg
+	beq.s	.no
+	move.l	g_DcImg(a4),a1		; a block of ours?
+	move.l	g_DcHdr+dh_Len(a4),d4
+	cmp.l	#SH_SIZEOF,d4
+	blo.s	.bad
+	cmp.l	#SH_MAGIC,sh_Magic(a1)
+	bne.s	.bad
+	move.l	sh_Index(a1),d0
+	cmp.l	d4,d0
+	bhi.s	.bad
+	move.l	sh_NRules(a1),d1
+	add.l	sh_NVars(a1),d1
+	lsl.l	#2,d1
+	add.l	d1,d0
+	cmp.l	d4,d0
+	bhi.s	.bad
+	move.l	a3,a0
+	move.l	d4,d0
+	move.l	d2,d1
+	move.l	d3,-(sp)
+	move.l	(sp)+,d2		; (Keep: d1 text, d2 env)
+	bsr	Keep
+	move.l	d0,d4
+	jsr	DcImgFree
+	move.l	d4,d0
+	bra.s	.x
+.bad:	jsr	DcImgFree
+.no:	moveq	#0,d0
+.x:	lea	SH_KEY(sp),sp
+	movem.l	(sp)+,d2-d4/a2-a3
+	tst.l	d0
+	rts
+
+; ShKey - the disk cache's key for URL a0, text hash d2, env d3, into
+; a1: "URL|css1|TEXT|ENV" (the block's format in it)
+ShKey:	move.l	#URL_MAX-1,d1
+.c:	move.b	(a0)+,(a1)+
+	dbeq	d1,.c
+	subq.l	#1,a1
+	lea	ShKeyMid(pc),a0
+.m:	move.b	(a0)+,(a1)+
+	bne.s	.m
+	subq.l	#1,a1
+	move.l	a1,a0
+	move.l	d2,d0
+	bsr	Hex8
+	move.b	#'|',(a0)+
+	move.l	d3,d0
+	bsr	Hex8
+	clr.b	(a0)
+	rts
+
+; Hex8 - d0 as 8 hex digits at a0 (advanced)
+Hex8:	moveq	#8-1,d1
+.l:	rol.l	#4,d0
+	move.l	d0,-(sp)
+	and.w	#15,d0
+	move.b	HexD(pc,d0.w),(a0)+
+	move.l	(sp)+,d0
+	dbf	d1,.l
+	rts
+HexD:		dc.b	"0123456789abcdef"
+ShKeyMid:	dc.b	"|css1|",0
+	even
 
 ;--------------------------------------------------------------------
 ; SheetLoad - kept sheet a0 into the page: its rules in the cascade
@@ -313,6 +403,7 @@ SheetSave:
 	move.l	sv_Buf+buf_Data(a5),a0
 	tst.l	sv_Fail(a5)
 	bne.s	.fv
+	move.l	#SH_MAGIC,sh_Magic(a0)
 	move.l	d3,sh_NRules(a0)
 	move.l	d5,sh_NVars(a0)
 	move.l	d0,sh_Index(a0)
@@ -326,8 +417,15 @@ SheetSave:
 	bsr	SvAppend
 	tst.l	sv_Fail(a5)
 	bne.s	.fv
-	move.l	a3,a0			; kept
+	move.l	d2,-(sp)
+	move.l	a3,a0			; kept: in memory ...
+	move.l	sv_Buf+buf_Data(a5),a1
+	move.l	sv_Buf+buf_Len(a5),d0
+	move.l	d6,d1
+	move.l	d7,d2
 	bsr	Keep
+	move.l	(sp)+,d2
+	bsr	DiskKeep		; ... and on disk
 .fv:	move.l	a2,a1
 	jsr	Free
 .free:	move.l	d4,a1
@@ -408,32 +506,35 @@ SaveVars:
 	movem.l	(sp)+,d2/a2-a3/a5
 	rts
 
-; Keep - (SheetSave) the block made, for URL a0, in the list (the
-; oldest go if it is too big)
-Keep:	movem.l	d2-d3/a2-a3,-(sp)
-	move.l	a0,a3
-	move.l	sv_Buf+buf_Len(a5),d2	; d2 = block bytes
+; Keep - block a1 (d0 bytes) of the sheet of URL a0, text hash d1,
+; env d2, in the list (the oldest go if it is too big)
+; Out: d0 = the kept sheet or 0
+Keep:	movem.l	d2-d6/a2-a3,-(sp)
+	move.l	a0,a3			; a3 = URL
+	move.l	a1,d6			; d6 = the block
+	move.l	d0,d5			; d5 = its bytes
+	move.l	d1,d4			; d4 = text, d2 = env
 	move.l	a3,a0
 	jsr	StrLen
 	addq.l	#1,d0
 	move.l	d0,d3			; d3 = URL bytes
-	add.l	d2,d0
+	add.l	d5,d0
 	add.l	#SE_SIZEOF,d0
 	cmp.l	#SH_MAX,d0		; (never: too big)
-	bhi.s	.x
+	bhi.s	.no
 	move.l	d0,-(sp)
 	jsr	Alloc
 	move.l	(sp)+,d1
 	tst.l	d0
-	beq.s	.x
+	beq.s	.no
 	move.l	d0,a2
 	add.l	d1,g_ShBytes(a4)
-	move.l	d2,se_Size(a2)
-	move.l	d6,se_Text(a2)
-	move.l	d7,se_Env(a2)
-	move.l	sv_Buf+buf_Data(a5),a0	; the block
+	move.l	d5,se_Size(a2)
+	move.l	d4,se_Text(a2)
+	move.l	d2,se_Env(a2)
+	move.l	d6,a0			; the block
 	lea	SE_SIZEOF(a2),a1
-	move.l	d2,d0
+	move.l	d5,d0
 	bra.s	.ce
 .c:	move.b	(a0)+,(a1)+
 .ce:	subq.l	#1,d0
@@ -445,7 +546,7 @@ Keep:	movem.l	d2-d3/a2-a3,-(sp)
 	move.l	g_ShHead(a4),se_Next(a2)
 	move.l	a2,g_ShHead(a4)
 .trim:	cmp.l	#SH_MAX,g_ShBytes(a4)	; too much: the last goes
-	bls.s	.x
+	bls.s	.ok
 	lea	g_ShHead(a4),a0
 .l:	move.l	(a0),a1
 	tst.l	se_Next(a1)
@@ -455,7 +556,34 @@ Keep:	movem.l	d2-d3/a2-a3,-(sp)
 .last:	clr.l	(a0)
 	bsr	EntryFree
 	bra.s	.trim
-.x:	movem.l	(sp)+,d2-d3/a2-a3
+.ok:	move.l	a2,d0
+	bra.s	.x
+.no:	moveq	#0,d0
+.x:	movem.l	(sp)+,d2-d6/a2-a3
+	rts
+
+; DiskKeep - (SheetSave) the block made, for URL a3 (text d6, env d7),
+; in the disk cache too
+DiskKeep:
+	movem.l	d2-d3/a2,-(sp)
+	lea	-SH_KEY(sp),sp
+	move.l	a3,a0
+	move.l	sp,a1
+	move.l	d6,d2
+	move.l	d7,d3
+	bsr	ShKey
+	clr.l	g_DcHdr+dh_W(a4)	; (not an image: no size, no mask)
+	clr.l	g_DcHdr+dh_H(a4)
+	clr.l	g_DcHdr+dh_Mode(a4)
+	clr.l	g_DcHdr+dh_Mask(a4)
+	clr.l	g_DcHdr+dh_Hash(a4)
+	move.l	sp,a0
+	move.l	sv_Buf+buf_Data(a5),a1
+	move.l	sv_Buf+buf_Len(a5),d1
+	suba.l	a2,a2
+	jsr	DcStoreImg
+	lea	SH_KEY(sp),sp
+	movem.l	(sp)+,d2-d3/a2
 	rts
 
 ; EntryFree - kept sheet a1 (out of the list) freed

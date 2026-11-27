@@ -14,6 +14,7 @@ log = os.path.join(r, "csscache.log")
 out = open(os.path.join(r, "csscache.driver"), "w")
 U = "http://127.0.0.1:8080/csscache.html"
 U2 = "http://127.0.0.1:8080/csscache2.html"     # (the same: another URL)
+U3 = "http://127.0.0.1:8080/csscache3.html"
 
 
 def step(m):
@@ -33,9 +34,6 @@ try:
     lines = open(log, encoding="latin-1").read().split("\n")
     time.sleep(2)
     a.shot(os.path.join(r, "csscache-2.png"))
-    a.key("Escape")
-    time.sleep(2)
-    a.shot(os.path.join(r, "csscache-3.png"))
     pages = [l for l in lines if l.startswith("page ")]
     step("heights: %s" % " ".join(l.split()[2] for l in pages))
     kept = [l for l in lines if l.startswith("sheetkept ")]
@@ -49,6 +47,22 @@ try:
          "info:"], capture_output=True, text=True)
     w, h = [int(v) for v in res.stdout.split()[:2]]
     step("difference: %dx%d" % (w, h))
+    a.key("ctrl+q")
+    # Velox again: the sheet from the disk cache
+    log2 = os.path.join(r, "csscache2.log")
+    wait_log(log2, "page " + U3, timeout=120)
+    time.sleep(2)
+    a.shot(os.path.join(r, "csscache-4.png"))
+    l2 = open(log2, encoding="latin-1").read().split("\n")
+    step("kept from disk: %d" % len([l for l in l2 if l.startswith("sheetkept ")]))
+    res = subprocess.run(
+        ["convert", os.path.join(r, "csscache-1.png"),
+         os.path.join(r, "csscache-4.png"), "-crop", "680x420+130+108",
+         "+repage", "-compose", "difference",
+         "-composite", "-threshold", "0", "-trim", "-format", "%w %h",
+         "info:"], capture_output=True, text=True)
+    w, h = [int(v) for v in res.stdout.split()[:2]]
+    step("difference from disk: %dx%d" % (w, h))
     a.key("ctrl+q")
     step("ok")
 except Exception as e:

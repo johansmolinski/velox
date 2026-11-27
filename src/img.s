@@ -46,7 +46,7 @@ bmh_Height		equ	2
 	xref	G,BusyEvents,PicInfo,PicDecode,PicFree,PalInit,PicToBitMap,PicAlloc,BufAppend,BufClear,GuiStatus,GuiRelayout,GuiRefresh,GuiPageWidth,GuiPaintImage
 	xref	FmtDec,StrCopy,LogEvent,ImgNetHook
 	xref	Hex8,StrIPrefix,BufAppendStr,BufAppendByte,DomNewNode,DomAddAttr
-	xref	GifNext,GifEnd,PicFreeMem
+	xref	GifNext,GifEnd,PicFreeMem,SvgFindId
 	xref	AtSrc,AtWidth,AtHeight,TabRec,DomAppend
 
 MAX_IMAGES	equ	32767		; <img>s a page (PfWalk counts with dbf)
@@ -100,9 +100,13 @@ ImgWalk:
 	beq.s	.x
 	cmp.b	#DN_ELEMENT,n_Type(a3)
 	bne.s	.next
-	cmp.w	#TAG_SVG,n_Tag(a3)	; (its content: not walked)
-	beq.s	.q
-	cmp.w	#TAG_IMG,n_Tag(a3)
+	cmp.w	#TAG_SVG,n_Tag(a3)	; (its content: not walked; hidden, a
+	bne.s	.img			;  sprite sheet: not drawn)
+	move.l	a3,a0
+	bsr	ElemHidden
+	bne.s	.next
+	bra.s	.q
+.img:	cmp.w	#TAG_IMG,n_Tag(a3)
 	bne.s	.down
 	move.l	a3,a0
 	bsr	ImgSrc
@@ -336,7 +340,18 @@ BgStep:
 	bsr	DecUnlock
 .uf:	jsr	DcImgFree
 	bra.s	.free
-.net:	move.l	g_WinSigMask(a4),d0
+.net:	lea	g_ImgUrl(a4),a0		; a data: URL: there already
+	lea	SData(pc),a1
+	jsr	StrIPrefix
+	beq.s	.http
+	move.l	a0,-(sp)
+	lea	g_Resp+r_Body(a4),a0
+	jsr	BufClear
+	move.l	(sp)+,a0
+	bsr	DataBody
+	move.l	#200,d0
+	bra.s	.got
+.http:	move.l	g_WinSigMask(a4),d0
 	or.l	#SIGBREAKF_CTRL_C,d0
 	move.l	d0,g_AbortMask(a4)
 	lea	ImgNetHook,a0
@@ -766,6 +781,24 @@ ShareImage:
 	addq.l	#1,g_ImgLoaded(a4)
 	bra.s	.l
 .x:	movem.l	(sp)+,d2-d4/a2-a3
+	rts
+
+; ElemHidden - is element a0 display: none (its style, CSS too)?
+; Out: d0 = 1 if so (CCR set)
+ElemHidden:
+	movem.l	a2,-(sp)
+	lea	-STYLE_SIZEOF(sp),sp
+	move.l	sp,a2
+	jsr	ElemStyle
+	beq.s	.no
+	cmp.b	#DISP_NONE,st_Display(sp)
+	bne.s	.no
+	moveq	#1,d0
+	bra.s	.x
+.no:	moveq	#0,d0
+.x:	lea	STYLE_SIZEOF(sp),sp
+	movem.l	(sp)+,a2
+	tst.l	d0
 	rts
 
 ; ImgSrc - the URL of <img> a0: its data-src (or data-lazy-src,
@@ -2140,13 +2173,140 @@ InlineBody:
 	jsr	BufAppend
 .tn:	move.l	n_Next(a3),a3
 	bra.s	.tx
-.end:	lea	g_Resp+r_Body(a4),a0
+.end:	bsr	SpriteRefs		; (what its <use>s name elsewhere)
+	lea	g_Resp+r_Body(a4),a0
 	lea	SSvgClose(pc),a1
 	jsr	BufAppendStr
 	bra.s	.y
-.data:	move.l	a2,a0			; data:[type][;base64],data
+.data:	move.l	a2,a0
+	bsr	DataBody
+.y:	moveq	#1,d0
+.x:	movem.l	(sp)+,d2-d3/a2-a3
+	rts
+.byte:	lea	g_Resp+r_Body(a4),a0	; (byte d0 appended)
+	jmp	BufAppendByte
+
+; SpriteRefs - (InlineBody, an <svg>'s markup in g_Resp+r_Body) each
+; href="#id" (16 at most) it does not define: that element, from the
+; page's other <svg>s (a sprite sheet of <symbol>s), appended in a
+; <defs>
+SpriteRefs:
+	movem.l	d2-d7/a2-a3,-(sp)
+	moveq	#0,d7			; d7 = where (an offset: the buffer
+	moveq	#16,d6			;  moves), d6 = how many more
+.l:	move.l	g_Resp+r_Body+buf_Data(a4),a2
+	move.l	g_Resp+r_Body+buf_Len(a4),d5
+	lea	(a2,d5.l),a3		; a3 = the end
+	add.l	d7,a2
+.f:	lea	7(a2),a0		; 'href="#'
+	cmp.l	a3,a0
+	bhs	.x
+	cmp.b	#'h',(a2)+
+	bne.s	.f
+	cmp.b	#'r',(a2)
+	bne.s	.f
+	cmp.b	#'e',1(a2)
+	bne.s	.f
+	cmp.b	#'f',2(a2)
+	bne.s	.f
+	cmp.b	#'=',3(a2)
+	bne.s	.f
+	cmp.b	#'#',5(a2)
+	bne.s	.f
+	move.b	4(a2),d2		; (its quote)
+	lea	6(a2),a2		; a2 = the id: to the quote
+	move.l	a2,a0
+.e:	cmp.l	a3,a0
+	bhs	.x
+	cmp.b	(a0)+,d2
+	bne.s	.e
+	move.l	a0,d3
+	subq.l	#1,d3
+	sub.l	a2,d3			; d3 = its length
+	move.l	a0,d7			; (on from there)
+	sub.l	g_Resp+r_Body+buf_Data(a4),d7
+	tst.l	d3
+	beq.s	.l
+	move.l	g_Resp+r_Body+buf_Data(a4),a0	; defined here (or added
+	move.l	d5,d0				;  already)?
+	move.l	a2,a1
+	move.l	d3,d1
+	jsr	SvgFindId
+	bne.s	.l
+	move.l	a2,a1			; in another <svg> of the page?
+	move.l	d3,d1
+	bsr	SpriteFind		; a0 = its markup, d0 = its length
+	beq.s	.l
+	move.l	a0,a3
+	move.l	d0,d4
+	lea	g_Resp+r_Body(a4),a0	; "<defs>" it "</defs>"
+	lea	SDefs(pc),a1
+	jsr	BufAppendStr
+	lea	g_Resp+r_Body(a4),a0
+	move.l	a3,a1
+	move.l	d4,d0
+	jsr	BufAppend
+	lea	g_Resp+r_Body(a4),a0
+	lea	SDefsE(pc),a1
+	jsr	BufAppendStr
+	subq.l	#1,d6
+	bne	.l
+.x:	movem.l	(sp)+,d2-d7/a2-a3
+	rts
+
+; SpriteFind - (SpriteRefs) the element of id a1 (d1 bytes) in the
+; page's <svg>s other than a5
+; Out: a0 = its markup, d0 = its length (0: none; CCR set)
+SpriteFind:
+	movem.l	d2-d3/a2-a3,-(sp)
+	move.l	a1,a3			; a3/d3 = the id
+	move.l	d1,d3
+	move.l	g_Doc(a4),d0
+	beq.s	.no
+	move.l	d0,a2
+.n:	move.l	n_First(a2),d0		; the next node
+	bne.s	.go
+.up:	move.l	n_Next(a2),d0
+	bne.s	.go
+	move.l	n_Parent(a2),d0
+	beq.s	.no
+	move.l	d0,a2
+	bra.s	.up
+.go:	move.l	d0,a2
+	cmp.b	#DN_ELEMENT,n_Type(a2)
+	bne.s	.n
+	cmp.w	#TAG_SVG,n_Tag(a2)
+	bne.s	.n
+	cmp.l	a5,a2
+	beq.s	.up			; (not its own; not into an <svg>)
+	move.l	n_First(a2),d0		; its markup
+	beq.s	.up
+	move.l	d0,a0
+	cmp.b	#DN_TEXT,n_Type(a0)
+	bne.s	.up
+	move.l	n_Data2(a0),d0
+	move.l	n_Data(a0),a0
+	move.l	a3,a1
+	move.l	d3,d1
+	jsr	SvgFindId
+	beq.s	.up
+	bra.s	.x
+.no:	moveq	#0,d0
+.x:	movem.l	(sp)+,d2-d3/a2-a3
+	tst.l	d0
+	rts
+
+SDefs:	dc.b	"<defs>",0
+SDefsE:	dc.b	"</defs>",0
+	even
+
+; DataBody - a data: URL's data (a0: after "data:"; [type][;base64],
+; data) appended to g_Resp+r_Body
+DataBody:
+	movem.l	a2-a3,-(sp)
+	move.l	a0,a2
 .dc:	move.b	(a0)+,d0
-	beq.s	.y			; (no ',': no data)
+	beq.s	.x			; (no ',': no data)
 	cmp.b	#',',d0
 	bne.s	.dc
 	move.l	a0,a3			; a3 = the data
@@ -2160,14 +2320,11 @@ InlineBody:
 	bra.s	.b
 .b64:	move.l	a3,a0
 	bsr	B64Body
-	bra.s	.y
+	bra.s	.x
 .pct:	move.l	a3,a0
 	bsr	PctBody
-.y:	moveq	#1,d0
-.x:	movem.l	(sp)+,d2-d3/a2-a3
+.x:	movem.l	(sp)+,a2-a3
 	rts
-.byte:	lea	g_Resp+r_Body(a4),a0	; (byte d0 appended)
-	jmp	BufAppendByte
 
 ; B64Body - (InlineBody) base64 text a0 (to its NUL) decoded, appended
 ; to g_Resp+r_Body (other characters passed over)

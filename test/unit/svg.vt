@@ -11,3 +11,4 @@ decode test/unit/svg/styled.svg build/svg/styled.16.argb 16
 decode test/unit/svg/icon.svg build/svg/icon.32.argb 32
 decode test/unit/svg/icon.svg build/svg/icon.200.argb 200
 decode test/unit/svg/gradient.svg build/svg/gradient.0.argb
+decode test/unit/svg/use.svg build/svg/use.240.argb 240

@@ -556,9 +556,12 @@ them cut and damaged files).
   size. svg.s reads the file as XML and draws paths (all commands,
   arcs too), the basic shapes, groups with transforms, fills (non-zero,
   even-odd) and strokes, with opacity; style comes from attributes,
-  `style=""` and the file's `<style>` class rules. Gradients are one
-  colour (their stops mixed); text, `<use>`, clipping, masks and
-  filters are not drawn. It is all fixed point: 16.16 for the user's
+  `style=""` and the file's `<style>` class rules, `<use>` of an element
+  or a `<symbol>` (its viewBox fitted into the use's box). Gradients
+  are one colour (their stops mixed); text, clipping, masks and filters
+  are not drawn. An inline `<svg>` that uses an id it does not define
+  gets that element from the page's other `<svg>`s (a sprite sheet)
+  appended in a `<defs>`; hidden ones (display: none) are not drawn. It is all fixed point: 16.16 for the user's
   coordinates and transforms, 24.8 on the image; arcs and rotations
   by CORDIC. A shape's edges are filled a pixel row at a time, four
   samples a row, each span's horizontal coverage exact; strokes are a

@@ -11,5 +11,8 @@ img.css { width: 32px; height: auto }
 <p style="color: #c00000">inline: <svg width="20" height="20" viewBox="0 0 24 24"><title>Close</title><path d="M2 2L22 22M22 2L2 22" stroke="currentColor" stroke-width="3"/></svg>
  <svg class="ic" viewBox="0 0 10 10" style="width: 18px; height: 18px"><rect width="10" height="10" fill="blue"/></svg> after</p>
 <p>data: <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAGCAIAAAB1kpiRAAAAFElEQVR4nGM8ISfHgBsw4ZEbYGkAwKABEOrItmQAAAAASUVORK5CYII=" alt="png"> <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2214%22%20height%3D%2214%22%3E%3Ccircle%20cx%3D%227%22%20cy%3D%227%22%20r%3D%226%22%20fill%3D%22%23080%22/%3E%3C/svg%3E" alt="svg"></p>
+<svg style="display: none"><symbol id="i-check" viewBox="0 0 24 24"><path d="M2 12l7 7L22 5" fill="none" stroke="currentColor" stroke-width="3"/></symbol></svg>
+<p style="color: #008000">sprite: <svg class="i" width="16" height="16"><use xlink:href="#i-check"></use></svg> done</p>
+<div style="width: 60px; height: 16px; background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFElEQVR4nGNkqDjBgA0wYRUdtBIA/cABUNW0mHwAAAAASUVORK5CYII=)">&nbsp;</div>
 <p>lazy: <img src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=" data-src="test.png" alt="lazy"></p>
 </body></html>

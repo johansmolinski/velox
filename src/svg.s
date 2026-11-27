@@ -31,7 +31,7 @@
 
 	include	"velox.i"
 
-	xdef	SvgIs,SvgInfo,SvgDecode
+	xdef	SvgIs,SvgInfo,SvgDecode,SvgFindId
 	xref	PicNew,PicAlloc,PicFreeMem
 
 MAXEDGES	equ	4096		; edges filled at once (more: in parts)
@@ -136,6 +136,7 @@ sc_RCol		rs.l	1		; the paint being filled: colour,
 sc_ROp		rs.l	1		; opacity (0 - 256),
 sc_RRule	rs.l	1		; even-odd
 sc_HW		rs.l	1		; a stroke's half width (24.8)
+sc_UseDepth	rs.l	1		; <use>s being drawn
 sc_ValN		rs.l	1		; values copied (ValCopy)
 sc_Val		rs.b	VALMAX*4
 SC_SIZEOF	rs.b	0
@@ -473,7 +474,23 @@ Draw:	movem.l	d2/a2,-(sp)
 	clr.l	gs_Rule(a0)
 	bsr	ViewBox
 	bsr	ReadStyles		; the <style>s first (rules for all)
-	move.l	sc_Text(a5),a2
+	move.l	sc_Text(a5),a0
+	move.l	sc_End(a5),a1
+	bsr	DrawRange
+	movem.l	(sp)+,d2/a2
+	rts
+
+; DrawRange - (Draw, UseElem) the elements in a0 .. a1, in order (what
+; is passed over, <defs>, kept as they were around it)
+DrawRange:
+	movem.l	a2,-(sp)
+	move.l	sc_End(a5),-(sp)
+	move.l	sc_Skip(a5),-(sp)
+	move.l	sc_Defs(a5),-(sp)
+	move.l	a1,sc_End(a5)
+	clr.l	sc_Skip(a5)
+	clr.l	sc_Defs(a5)
+	move.l	a0,a2
 .l:	move.l	a2,a0
 	bsr	NextTag
 	beq.s	.x
@@ -484,7 +501,10 @@ Draw:	movem.l	d2/a2,-(sp)
 	bra.s	.l
 .end:	bsr	EndTag
 	bra.s	.l
-.x:	movem.l	(sp)+,d2/a2
+.x:	move.l	(sp)+,sc_Defs(a5)
+	move.l	(sp)+,sc_Skip(a5)
+	move.l	(sp)+,sc_End(a5)
+	movem.l	(sp)+,a2
 	rts
 
 ; ViewBox - (Draw) the transform: viewBox to the image, scaled the same
@@ -861,6 +881,12 @@ StartTag:
 	bne.s	.skip
 	bsr	Hidden			; display="none": the same
 	bne.s	.skip
+	lea	NUse(pc),a0		; <use>: what it names, here
+	bsr	TagIs
+	beq.s	.nuse
+	bsr	UseElem
+	bra.s	.x
+.nuse:
 	lea	GroupTags(pc),a2	; groups: their state for the content
 	bsr	TagIn
 	beq.s	.shape
@@ -1025,10 +1051,13 @@ Shape:	movem.l	d2/a2,-(sp)
 GroupTags:	dc.b	"g",0,"a",0,"svg",0,"switch",0,0
 SkipTags:	dc.b	"symbol",0,"clipPath",0,"mask",0,"pattern",0
 		dc.b	"marker",0,"title",0,"desc",0,"metadata",0,"text",0
-		dc.b	"image",0,"use",0,"style",0,"script",0,"filter",0
+		dc.b	"image",0,"style",0,"script",0,"filter",0
 		dc.b	"foreignObject",0,0
 GradTags:	dc.b	"linearGradient",0,"radialGradient",0,0
 NStop:		dc.b	"stop",0
+NUse:		dc.b	"use",0
+NHref:		dc.b	"href",0
+NXHref:		dc.b	"xlink:href",0
 NDefs:		dc.b	"defs",0
 NPath:		dc.b	"path",0
 NRect:		dc.b	"rect",0
@@ -3860,3 +3889,279 @@ NameChar:
 	rts
 .y:	moveq	#1,d0
 	rts
+
+;--------------------------------------------------------------------
+; <use> and the elements it shows
+;--------------------------------------------------------------------
+
+; SvgFindId - the element with id d1 bytes at a1, in text a0 .. a0 + d0
+; (no context: img.s uses it on a page's other <svg>s too)
+; Out: a0 = its '<', d0 = its markup's length (0: none; CCR set)
+SvgFindId:
+	movem.l	d2-d4/a2-a3,-(sp)
+	move.l	a0,a2			; a2 = where, a3 = the end
+	lea	(a0,d0.l),a3
+	move.l	a0,d4			; d4 = the text's start
+	move.l	d1,d3			; d3 = the id's length
+.l:	lea	4(a2,d3.l),a0		; "id=" X quote: room?
+	cmp.l	a3,a0
+	bhs	.no
+	cmp.b	#'i',(a2)+
+	bne.s	.l
+	cmp.b	#'d',(a2)
+	bne.s	.l
+	cmp.b	#'=',1(a2)
+	bne.s	.l
+	move.b	-2(a2),d0		; (a blank before it)
+	cmp.b	#' ',d0
+	bhi.s	.l
+	move.b	2(a2),d2		; its quote
+	cmp.b	#'"',d2
+	beq.s	.q
+	cmp.b	#39,d2
+	bne.s	.l
+.q:	lea	3(a2),a0		; the id?
+	move.l	a1,-(sp)
+	move.l	d3,d0
+.c:	subq.l	#1,d0
+	bmi.s	.ce
+	cmpm.b	(a1)+,(a0)+
+	beq.s	.c
+	move.l	(sp)+,a1
+	bra.s	.l
+.ce:	move.l	(sp)+,a1
+	cmp.b	(a0),d2			; (and it ends there)
+	bne.s	.l
+	move.l	a2,a0			; back to its '<'
+.b:	cmp.l	d4,a0
+	bls.s	.no
+	cmp.b	#'<',-(a0)
+	bne.s	.b
+	move.l	a0,a2
+	move.l	a3,a1
+	bsr	SvgElemLen
+	beq.s	.no
+	move.l	a2,a0
+	bra.s	.x
+.no:	moveq	#0,d0
+.x:	movem.l	(sp)+,d2-d4/a2-a3
+	tst.l	d0
+	rts
+
+; SvgElemLen - the length of the element whose start tag is at a0 (its
+; end tag, or "/>", included; to a1 at most)
+; Out: d0 = it (0 if it does not end; CCR set)
+SvgElemLen:
+	movem.l	d2-d3/a2,-(sp)
+	move.l	a0,a2
+	moveq	#0,d2			; d2 = depth
+.t:	cmp.l	a1,a2			; the next '<'
+	bhs.s	.no
+	cmp.b	#'<',(a2)+
+	bne.s	.t
+	move.b	(a2),d0
+	cmp.b	#'/',d0
+	beq.s	.end
+	cmp.b	#'!',d0			; (comments, <!..>, <?..?>)
+	beq.s	.gt
+	cmp.b	#'?',d0
+	beq.s	.gt
+	moveq	#0,d3			; a start tag: to its '>' (quotes
+.st:	cmp.l	a1,a2			;  passed over), "/>" or not
+	bhs.s	.no
+	move.b	(a2)+,d0
+	cmp.b	#'"',d0
+	beq.s	.qt
+	cmp.b	#39,d0
+	beq.s	.qt
+	cmp.b	#'>',d0
+	beq.s	.se
+	move.b	d0,d3
+	bra.s	.st
+.qt:	cmp.l	a1,a2
+	bhs.s	.no
+	cmp.b	(a2)+,d0
+	bne.s	.qt
+	bra.s	.st
+.se:	cmp.b	#'/',d3			; (empty: as deep as before)
+	beq.s	.dn
+	addq.l	#1,d2
+	bra.s	.t
+.end:	subq.l	#1,d2
+.gt:	cmp.l	a1,a2			; to its '>'
+	bhs.s	.no
+	cmp.b	#'>',(a2)+
+	bne.s	.gt
+.dn:	tst.l	d2
+	bgt.s	.t
+	move.l	a2,d0
+	sub.l	a0,d0
+	bra.s	.x
+.no:	moveq	#0,d0
+.x:	movem.l	(sp)+,d2-d3/a2
+	tst.l	d0
+	rts
+
+; UseElem - (StartTag) <use href="#id" x y width height>: the element of
+; that id drawn here (with the <use>'s style and transform, moved by x,
+; y); a <symbol> (or <svg>): its content, its viewBox into width x
+; height (or its own size)
+MAXUSE		equ	4		; <use>s within <use>s
+UseElem:
+	movem.l	d2-d7/a2-a3,-(sp)
+	cmp.l	#MAXUSE,sc_UseDepth(a5)
+	bhs	.x
+	lea	NHref(pc),a0		; the id
+	bsr	AttrRaw
+	bne.s	.h
+	lea	NXHref(pc),a0
+	bsr	AttrRaw
+	beq	.x
+.h:	cmp.b	#'#',(a0)
+	bne	.x
+	addq.l	#1,a0
+	subq.l	#1,d1
+	ble	.x
+	move.l	a0,a3			; a3/d7 = the id
+	move.l	d1,d7
+	lea	NX(pc),a0		; x, y, width, height
+	bsr	NumAttr
+	move.l	d0,d2
+	lea	NY(pc),a0
+	bsr	NumAttr
+	move.l	d0,d3
+	lea	NWidth(pc),a0
+	bsr	NumAttr
+	move.l	d0,d4
+	lea	NHeight(pc),a0
+	bsr	NumAttr
+	move.l	d0,d5
+	move.l	sc_Text(a5),a0		; the element
+	move.l	sc_End(a5),d0
+	move.l	sc_Text(a5),d1
+	sub.l	d1,d0
+	move.l	a3,a1
+	move.l	d7,d1
+	bsr	SvgFindId
+	beq	.x
+	move.l	a0,a2			; a2 .. a3: its markup
+	lea	(a0,d0.l),a3
+	addq.l	#1,sc_UseDepth(a5)
+	bsr	Push			; the <use>'s style, then moved
+	bsr	ElStyle
+	lea	-24(sp),sp
+	move.l	sp,a0
+	move.l	#FIX1,(a0)
+	clr.l	4(a0)
+	clr.l	8(a0)
+	move.l	#FIX1,12(a0)
+	move.l	d2,16(a0)
+	move.l	d3,20(a0)
+	bsr	MulM
+	lea	24(sp),sp
+	move.l	a2,a0			; a <symbol>, an <svg>?
+	bsr	NextTag			; (its attributes now)
+	move.l	a0,d6			; d6 = after its start tag
+	lea	NSymbol(pc),a0
+	bsr	TagIs
+	bne.s	.sym
+	lea	NSvg(pc),a0
+	bsr	TagIs
+	bne.s	.sym
+	move.l	a2,a0			; else it, as it is
+	move.l	a3,a1
+	bsr	DrawRange
+	bra.s	.pop
+.sym:	tst.l	sc_Empty(a5)
+	bne.s	.pop
+	lea	NViewBox(pc),a0		; its viewBox into width x height
+	bsr	Attr
+	beq.s	.in
+	move.l	d0,a0
+	bsr	Num
+	move.l	d0,d2			; vbx, vby, vbw, vbh
+	bsr	Num
+	move.l	d0,d3
+	bsr	Num
+	move.l	d0,a1			; (vbw: Num keeps a1)
+	bsr	Num
+	move.l	d0,d1
+	move.l	a1,d0
+	bsr	SymBox
+.in:	move.l	a2,a0			; its content: after its start tag, to
+	bsr	NextTag			;  its end
+	move.l	a3,a1
+	bsr	DrawRange
+.pop:	bsr	Pop
+	subq.l	#1,sc_UseDepth(a5)
+.x:	movem.l	(sp)+,d2-d7/a2-a3
+	rts
+
+; SymBox - (UseElem) viewBox d2 d3 d0 d1 (x y w h) into d4 x d5 (0:
+; the viewBox's own size): scaled the same both ways (meet), centred
+SymBox:	movem.l	d6-d7,-(sp)
+	move.l	d0,d6			; d6/d7 = vbw, vbh
+	move.l	d1,d7
+	tst.l	d6
+	ble.s	.x
+	tst.l	d7
+	ble.s	.x
+	tst.l	d4			; (none given: its own size)
+	bgt.s	.w
+	move.l	d6,d4
+.w:	tst.l	d5
+	bgt.s	.h
+	move.l	d7,d5
+.h:	move.l	d4,d0			; s = min(w / vbw, h / vbh)
+	move.l	d6,d1
+	bsr	XDiv
+	move.l	d0,-(sp)
+	move.l	d5,d0
+	move.l	d7,d1
+	bsr	XDiv
+	move.l	(sp)+,d1
+	cmp.l	d1,d0
+	ble.s	.s
+	move.l	d1,d0
+.s:	lea	-24(sp),sp		; T = scale s, moved: (w - vbw s) / 2 -
+	move.l	sp,a0			; vbx s, (h - vbh s) / 2 - vby s
+	move.l	d0,(a0)
+	clr.l	4(a0)
+	clr.l	8(a0)
+	move.l	d0,12(a0)
+	move.l	d0,-(sp)		; (s)
+	move.l	d6,d0
+	move.l	(sp),d1
+	bsr	XMul
+	move.l	d4,d1
+	sub.l	d0,d1
+	asr.l	#1,d1
+	move.l	d1,-(sp)
+	move.l	d2,d0
+	move.l	4(sp),d1
+	bsr	XMul
+	move.l	(sp)+,d1
+	sub.l	d0,d1
+	move.l	d1,4+16(sp)
+	move.l	d7,d0
+	move.l	(sp),d1
+	bsr	XMul
+	move.l	d5,d1
+	sub.l	d0,d1
+	asr.l	#1,d1
+	move.l	d1,-(sp)
+	move.l	d3,d0
+	move.l	4(sp),d1
+	bsr	XMul
+	move.l	(sp)+,d1
+	sub.l	d0,d1
+	move.l	d1,4+20(sp)
+	addq.l	#4,sp
+	move.l	sp,a0
+	bsr	MulM
+	lea	24(sp),sp
+.x:	movem.l	(sp)+,d6-d7
+	rts
+
+NSymbol:	dc.b	"symbol",0
+	even

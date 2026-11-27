@@ -45,7 +45,8 @@ A small, fast web browser for classic AmigaOS 3.x, written entirely in
 - Images: JPEG (baseline and progressive), PNG (all kinds, with
   transparency), GIF and WebP (lossy, lossless, with alpha) decoded by
   Velox itself, SVG drawn by it (paths, shapes, transforms, fills and
-  strokes, styles; at the size shown), dithered to the screen's colours (backgrounds: the
+  strokes, styles, `<use>` and sprite sheets of `<symbol>`s; at the size
+  shown; also inline `<svg>` and `data:` URLs), dithered to the screen's colours (backgrounds: the
   nearest colour, so text on them stays readable), transparency kept;
   other formats through datatypes.library. Loaded while the page is
   already usable.

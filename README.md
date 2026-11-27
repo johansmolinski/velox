@@ -173,6 +173,17 @@ areas wrap their lines):
 A click puts the cursor where it is, Shift-click selects to there, and
 dragging selects.
 
+## ARexx
+
+Velox has an ARexx port, `VELOX` (`VELOX.2` ... if more run): `OPEN url`,
+`NEWTAB [url]`, `CLOSETAB`, `BACK`, `FORWARD`, `RELOAD`, `STOP`, `HOME`,
+`QUIT`, `GETURL`, `GETTITLE`, `GETSTATUS` (`LOADING`/`IDLE`), and for
+password managers `GETFIELDS` (the text and password fields' names and
+types, never their values), `SETFIELD name text` and `SUBMIT [name]`.
+Return codes: 0 done, 5 nothing done, 10 not understood. Scripts in
+`PROGDIR:Rexx` (`*.rexx`, `*.vrx`) make a Rexx menu; one chosen runs with
+the page's address and the port's name as its arguments.
+
 ## https through a proxy
 
 Without AmiSSL, or on a slow machine, run `velox-proxy.py` on a modern

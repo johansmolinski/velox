@@ -1,0 +1,18 @@
+#!/bin/sh
+# checks for rexx.script: what the script said; the form sent with the
+# fields it set
+d=$(dirname "$1"); fail=0
+cat "$1"
+grep -q '^url http://127.0.0.1:8080/rexxlogin.html' "$1" || { echo "GETURL"; fail=1; }
+grep -q '^title Rexx login' "$1" || { echo "GETTITLE"; fail=1; }
+grep -q '^status IDLE' "$1" || { echo "GETSTATUS"; fail=1; }
+grep -q '^fields user text pass password' "$1" || { echo "GETFIELDS"; fail=1; }
+grep -q '^setuser 0' "$1" || { echo "SETFIELD"; fail=1; }
+grep -q '^setnone 5' "$1" || { echo "SETFIELD of no field"; fail=1; }
+grep -q '^unknown 10' "$1" || { echo "an unknown command"; fail=1; }
+grep -q '^submit 0' "$1" || { echo "SUBMIT"; fail=1; }
+grep -q '^after http://127.0.0.1:8080/echo-rexx' "$1" || { echo "not sent"; fail=1; }
+grep -q 'POST /echo-rexx body=user=alice&pass=secret' "$d/../server.log" || { echo "the fields not sent"; fail=1; }
+grep -q '^done' "$1" || { echo "the script did not end"; fail=1; }
+grep -q '^rexxmenu 1$' "$d/rexx.log" || { echo "no Rexx menu of one script"; fail=1; }
+exit $fail

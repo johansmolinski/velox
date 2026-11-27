@@ -17,7 +17,7 @@
 	xref	BufAppendByte,BufAppendStr,BufClear,UrlResolve
 	xref	FrameNav,NavTarget,BufFree
 	xref	EdMove,EdType,EdBack,EdDel,EdSelAll,EdSel,EdUndo,EdRedo,ClipCopyN,ClipPaste
-	xdef	FormCopy
+	xdef	FormCopy,FormSetText
 	xref	NavGo,NavPost,GuiPaintAll,GuiStatus,GuiPaintNode
 	xref	GuiRelayout,TaskNow,BufReserve,StrCopyN,LogEvent
 
@@ -264,6 +264,32 @@ AllocValue:
 	addq.l	#1,d0
 	jsr	PageAlloc
 	move.l	d0,fs_Value(a3)
+	rts
+
+; FormSetText - (rexx.s SETFIELD) the text of field a0 (text or
+; password) set to a1, painted
+; Out: d0 = 1 if done (CCR set)
+FormSetText:
+	movem.l	a2-a3,-(sp)
+	move.l	a0,a2
+	move.l	a1,-(sp)
+	jsr	FormStateOf
+	move.l	(sp)+,a0
+	tst.l	d0
+	beq.s	.x
+	move.l	d0,a3
+	move.b	fs_Kind(a3),d0
+	cmp.b	#FK_TEXT,d0
+	beq.s	.ok
+	cmp.b	#FK_PASSWORD,d0
+	bne.s	.no
+.ok:	bsr	SetValue
+	move.l	a2,a0
+	jsr	GuiPaintNode
+	moveq	#1,d0
+	bra.s	.x
+.no:	moveq	#0,d0
+.x:	movem.l	(sp)+,a2-a3
 	rts
 
 ; SetValue - In: a0 = text, a3 = state

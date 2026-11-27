@@ -486,6 +486,7 @@ JS is not on the roadmap yet, but it must stay possible to add. That means:
 | flex.s      | flexbox: items in rows (measured as table cells) or columns       |
 | grid.s      | CSS grid: column tracks, items placed by lines, areas or in order |
 | anim.s      | the animations' clock (timer.device): blink, marquees            |
+| rexx.s      | the ARexx port (commands, form filling) and the Rexx menu        |
 | iblock.s    | inline-blocks (and floats other than images): one box on a line  |
 | sheetcache.s | linked style sheets kept parsed (rules, custom properties) for the next pages |
 | visits.s    | the pages visited (ENVARC:Velox/Visited), matching a text typed   |

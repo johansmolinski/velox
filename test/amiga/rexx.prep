@@ -1,0 +1,34 @@
+#!/bin/sh
+# rexx: the ARexx script, in VELOX:t (it talks to Velox's port)
+cat > "$1/test.rexx" <<'REXX'
+/* rexx.script: Velox's ARexx port */
+OPTIONS RESULTS
+CALL ADDLIB('rexxsupport.library', 0, -30, 0)
+ADDRESS 'VELOX'
+'GETURL'
+SAY 'url' RESULT
+'GETTITLE'
+SAY 'title' RESULT
+'GETSTATUS'
+SAY 'status' RESULT
+'GETFIELDS'
+SAY 'fields' TRANSLATE(RESULT, ' ', '0a'x)
+'SETFIELD user alice'
+SAY 'setuser' RC
+'SETFIELD nosuch x'
+SAY 'setnone' RC
+'FROBNICATE'
+SAY 'unknown' RC
+'SETFIELD pass secret'
+'SUBMIT'
+SAY 'submit' RC
+CALL DELAY 150
+'GETURL'
+SAY 'after' RESULT
+'QUIT'
+SAY 'done'
+REXX
+# a script for the Rexx menu (PROGDIR:Rexx)
+mkdir -p "$1/../Rexx"
+printf '/* a menu script */\nPARSE ARG url port\nSAY url port\n' > "$1/../Rexx/Hello.rexx"
+printf 'not a script\n' > "$1/../Rexx/notes.txt"

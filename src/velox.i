@@ -926,6 +926,16 @@ g_AnimPend	rs.l	1		; ... sent, not back yet
 g_AnimTicks	rs.l	1		; ticks of 1/10 s (marquees' places)
 g_BlinkOff	rs.l	1		; blinking text hidden now
 g_ClipRect2	rs.b	ra_SIZEOF	; (gui.s PaintMarquee)
+REXX_BUF	equ	2048
+g_RexxBase	rs.l	1		; rexx.s: rexxsyslib.library,
+g_RexxPort	rs.l	1		; ... the port,
+g_RexxSig	rs.l	1		; ... its signal,
+g_RexxPublic	rs.l	1		; ... added (public),
+g_RexxName	rs.b	16		; ... its name
+g_RexxBuf	rs.l	1		; ... where a result is made (AllocVec)
+g_RexxMenu	rs.l	1		; ... the NewMenus with the Rexx menu,
+g_RexxNames	rs.l	1		; ... its scripts' names (AllocVec),
+g_RexxDir	rs.b	256		; ... their drawer
 g_TlX0		rs.l	1		; TileRect: the area (window),
 g_TlY0		rs.l	1
 g_TlX1		rs.l	1

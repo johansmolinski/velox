@@ -34,14 +34,15 @@
 	xref	PalFree,ImagesStop,ImagesPending,ImagesStep,ImagesFree,ImagePaint
 	xref	KeepFreeAll
 	xref	TaskResume,TaskLoopWait,TaskBusy,TaskAbort,NavStop,ImagesReap,ImagesReapNow,ImagesQuit,FragCheck,TaskNow
-	xref	AnimOpen,AnimClose,AnimCheck,AnimKick
+	xref	AnimOpen,AnimClose,AnimCheck,AnimKick,RexxOpen,RexxClose,RexxCheck
+	xref	RexxMenus,RexxRun,RexxMenuFree
 	xdef	GuiAnimTick,GuiAnimFind
 	xref	TaskPick,TabSelect,TabNew,TabClose,TabNext,TabShow,TabQuit,TabCaption
 	xref	DropInit,DropExit,DropUpdate,DropCheck,DropClick,DropChosen,UrlHook
 	xdef	GetPen
 	xref	TabBase,TabRec
 	xref	EdWidths,EdNextLine,EdLocate,EdLine,EdXOf,EdSel,EdHit,EdIndexAt
-	xdef	GuiTabShown,GuiStripSync,PaintStrip
+	xdef	GuiTabShown,GuiStripSync,PaintStrip,UrlPut
 
 PROP_FONT	equ	0
 SCROLL_W	equ	18
@@ -83,6 +84,7 @@ QUAL_COMMAND	equ	IEQUALIFIER_CONTROL|IEQUALIFIER_LCOMMAND|IEQUALIFIER_RCOMMAND
 GuiOpen:
 	movem.l	d2/a2,-(sp)
 	jsr	AnimOpen		; (the clock of blink and marquees)
+	jsr	RexxOpen		; (the ARexx port)
 	lea	g_PubScreen(a4),a0	; a named public screen, or the
 	tst.b	(a0)			; default one
 	beq.s	.def
@@ -183,6 +185,7 @@ GuiOpen:
 ; CreateMenus - GadTools menus for the window
 CreateMenus:
 	lea	NewMenus,a0
+	jsr	RexxMenus		; (and the Rexx menu, if there are scripts)
 	suba.l	a1,a1
 	GT	CreateMenusA
 	move.l	d0,g_Menu(a4)
@@ -204,6 +207,7 @@ MenuTags:	dc.l	GTMN_NewLookMenus,1,TAG_DONE
 ; GuiClose - close everything GuiOpen opened (safe on partial opens)
 ;--------------------------------------------------------------------
 GuiClose:
+	jsr	RexxClose
 	jsr	AnimClose
 	jsr	DropExit		; (its window shares our port: first)
 	bsr	StripFree
@@ -228,6 +232,7 @@ GuiClose:
 .nowin:	move.l	g_Menu(a4),a0
 	clr.l	g_Menu(a4)
 	GT	FreeMenus
+	jsr	RexxMenuFree		; (the Rexx menu's names: after it)
 	move.l	g_GList(a4),a0
 	clr.l	g_GList(a4)
 	GT	FreeGadgets
@@ -3938,6 +3943,7 @@ GuiEventLoop:
 .loop:	tst.l	g_Quit(a4)
 	bne	.x
 	jsr	AnimCheck		; (blink, marquees: a step)
+	jsr	RexxCheck		; (ARexx commands)
 	bsr	FrontWork		; something for the shown tab?
 	beq.s	.run
 	move.l	g_TabFront(a4),d0
@@ -3999,7 +4005,8 @@ GuiEventLoop:
 .ir:	jsr	ImagesReap		; (a stopped load's decoder)
 	move.l	d0,d2
 	or.l	g_DropSigMask(a4),d0	; (and the address field's keys,
-	or.l	g_AnimSig(a4),d0	;  the animations' clock)
+	or.l	g_AnimSig(a4),d0	;  the animations' clock, ARexx)
+	or.l	g_RexxSig(a4),d0
 	jsr	TaskLoopWait
 	move.l	d0,d3
 	and.l	g_DropSigMask(a4),d0
@@ -5037,7 +5044,11 @@ OnMenu:
 	move.l	d0,a2
 	move.w	mi_NextSelect(a2),d2
 	move.l	mi_SIZEOF(a2),d0	; user data: the action
-	lea	MenuActions(pc),a0
+	cmp.l	#MA_REXX,d0		; (a script of the Rexx menu)
+	blo.s	.act
+	jsr	RexxRun
+	bra.s	.l
+.act:	lea	MenuActions(pc),a0
 	add.w	d0,d0
 	add.w	(a0,d0.w),a0
 	jsr	(a0)
@@ -5045,6 +5056,7 @@ OnMenu:
 .x:	movem.l	(sp)+,d2/a2
 	rts
 
+MA_REXX		equ	100		; (rexx.s: its scripts' from here)
 MA_OPEN		equ	0
 MA_SAVE		equ	1
 MA_ABOUT	equ	2

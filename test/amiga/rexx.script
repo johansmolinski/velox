@@ -1,0 +1,10 @@
+; rexx: the ARexx port: the page's address, title, status and fields;
+; a login form filled in and sent; unknown commands; QUIT
+Echo >VELOX:r/rexx.txt "rexx"
+Run >NIL: SYS:System/RexxMast
+Run >NIL: VELOX:velox http://127.0.0.1:8080/rexxlogin.html LOG=VELOX:r/rexx.log
+SYS:Rexxc/WaitForPort VELOX
+Wait 8
+SYS:Rexxc/RX VELOX:t/test.rexx >>VELOX:r/rexx.txt
+Wait 3
+Echo >>VELOX:r/rexx.txt "done"

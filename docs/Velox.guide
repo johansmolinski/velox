@@ -22,6 +22,7 @@ A small, fast web browser for AmigaOS 3.x, written in 68k assembly.
    @{" Bookmarks and more " link Bookmarks}   Bookmarks, cookies, downloads, caches
 
    @{" https and the proxy" link Https}   Secure pages, with or without AmiSSL
+   @{" ARexx              " link ARexx}   Scripts, password managers, the Rexx menu
    @{" What Velox shows   " link Features}   HTML, CSS, images, frames, forms
    @{" Limits             " link Limits}   What it does not do (yet)
 
@@ -255,6 +256,47 @@ With AmiSSL 6 installed, Velox opens https pages itself and checks the servers' 
 @{b}The proxy@{ub}
 
 Without AmiSSL, or to make https fast on a slow Amiga, run velox-proxy.py on a modern computer on your network (Python 3; see the comment at its top) and set PROXY= or Velox/Proxy to that computer and port. The proxy does the encryption and keeps its connections to servers alive.
+
+@endnode
+
+@node ARexx "ARexx"
+
+@{b}The port@{ub}
+
+Velox has an ARexx port named VELOX (VELOX.2 and so on if more than one runs). Commands:
+
+  OPEN url           go to the address (as typed in the address field)
+  NEWTAB [url]       a new tab, shown
+  CLOSETAB           close the shown tab
+  BACK, FORWARD, RELOAD, STOP, HOME, QUIT
+  GETURL             the page's address
+  GETTITLE           its title
+  GETSTATUS          LOADING or IDLE
+  GETFIELDS          the text and password fields: "name type" a line
+  SETFIELD name text fill in the first field of that name
+  SUBMIT [name]      send the form of that field (else the login form)
+
+With OPTIONS RESULTS the GET commands give their answer in RESULT. The return code is 0 when done, 5 when nothing was done (no such field), 10 for a command Velox does not know. A password manager can fill in and send login forms this way: Velox never gives a field's value, and keeps no passwords itself.
+
+  /* log in */
+  OPTIONS RESULTS
+  ADDRESS 'VELOX'
+  'SETFIELD user johan'
+  'SETFIELD pass secret'
+  'SUBMIT'
+
+@{b}The Rexx menu@{ub}
+
+Scripts in the drawer Rexx next to Velox (names ending in .rexx or .vrx) are listed in a Rexx menu. One chosen runs with two arguments, the page's address and the port's name:
+
+  /* PROGDIR:Rexx/Title.rexx */
+  PARSE ARG url port
+  OPTIONS RESULTS
+  ADDRESS VALUE port
+  'GETTITLE'
+  SAY RESULT
+
+ARexx (RexxMast) must run for both.
 
 @endnode
 
